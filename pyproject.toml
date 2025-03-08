@@ -24,9 +24,9 @@ dependencies = [
     "httpx>=0.24.0",
     "toml>=0.10.2",
     "rich>=13.3.5",
-    "readwise-api>=0.3.0",
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
+    "readwise-api",
 ]
 
 [project.scripts]
@@ -105,6 +105,7 @@ docstring-code-line-length = "dynamic"
 
 [tool.uv.sources]
 ttrss-python = { git = "https://github.com/reuteras/ttrss-python.git" }
+readwise-api = { git = "https://github.com/reuteras/readwise-api.git" }
 
 [tool.ruff.lint.pydocstyle]
 convention="google"
