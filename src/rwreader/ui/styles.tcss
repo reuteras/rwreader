@@ -1,4 +1,4 @@
-/* styles.tcss - Styling for rwreader */
+/* styles.tcss - Styling for rwreader with progressive loading */
 
 /* Header styling */
 Header {
@@ -30,12 +30,42 @@ Header {
     color: $primary-lighten-2;
 }
 
-/* Article list styling */
-#articles {
+/* Article list container styling */
+#articles_container {
     height: 30%;
     min-height: 10;
     max-height: 40%;
     border-bottom: solid #344455;
+    overflow: auto;
+}
+
+/* Article list styling */
+#articles {
+    height: auto;
+    min-height: 5;
+    border: none;
+}
+
+/* Loading indicator styling */
+#loading_indicator {
+    height: 3;
+    width: 100%;
+    background: $surface;
+    content-align: center middle;
+}
+
+/* Load more button styling */
+#load_more {
+    height: 3;
+    background: $boost;
+    content-align: center middle;
+    color: $text;
+    text-style: bold;
+}
+
+#load_more:hover {
+    background: $accent;
+    color: $text-accent;
 }
 
 /* Content pane styling */
@@ -85,4 +115,20 @@ ListView > ListItem#header {
 #help-content {
     width: 100%;
     height: 100%;
+}
+
+/* Load more item styling */
+ListView > ListItem#load_more_item {
+    background: $accent-darken-2;
+    color: $text-accent;
+    text-style: bold;
+    text-align: center;
+    height: 3;
+    padding-top: 1;
+}
+
+ListView > ListItem#load_more_item:hover,
+ListView > ListItem#load_more_item.--highlight {
+    background: $accent;
+    color: $text-accent;
 }

@@ -26,6 +26,9 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - **G / ,**: Refresh data
 - **q**: Quit
 
+## Loading More
+- **space**: Load more articles when focused on the article list
+
 ## Library Categories
 - **Inbox**: Default location for new articles
 - **Later**: Articles saved for reading later
@@ -36,6 +39,7 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - Links in articles can be clicked to open in browser
 - Use the 'm' key to view all available metadata for an article
 - When an article is displayed, you can move it to any category with a single keystroke
+- The app now uses progressive loading for better performance with large libraries
 
 ## Debug
 - **Ctrl+R**: Reset cache and reload all data
