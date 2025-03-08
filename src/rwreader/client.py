@@ -84,8 +84,6 @@ class ReadwiseClient:
             logger.error(f"Error fetching library: {e}")
             return []
 
-    """Fixed methods for fetching articles by category in ReadwiseClient."""
-
     def get_library_by_category(self, category: str = "inbox", 
                             page: int = 1, page_size: int = 50) -> List[Dict[str, Any]]:
         """Get library items filtered by category.
@@ -98,8 +96,10 @@ class ReadwiseClient:
         Returns:
             List of library items
         """
+        # Use a more specific cache key that includes all filter parameters
         cache_key = f"library_category_{category}_{page}_{page_size}"
         if cache_key in self.cache:
+            logger.debug(f"Using cached data for category: {category}")
             return self.cache[cache_key]
         
         # Base params
@@ -108,18 +108,16 @@ class ReadwiseClient:
             "page_size": page_size,
         }
         
-        # Configure parameters for each category
+        # Configure parameters for each category - using different approach based on API behavior
         if category.lower() == "archive":
             # For archive, simply use archived=true
-            params["archived"] = "true"
+            params["archived"] = True
         elif category.lower() == "later":
-            # For later, we want unarchived items that are saved for later
-            params["archived"] = "false"
-            params["saved_for_later"] = "true"
+            # For later, we need to filter post-request as the API might not support direct filtering
+            params["archived"] = False  # Not archived
         elif category.lower() == "inbox":
-            # For inbox, we want unarchived items that are NOT saved for later
-            params["archived"] = "false"
-            params["saved_for_later"] = "false"
+            # For inbox, we need to filter post-request as well
+            params["archived"] = False  # Not archived
         
         try:
             full_url = f"{self.base_url}books/"
@@ -136,7 +134,17 @@ class ReadwiseClient:
                 results = data
             else:
                 results = []
-                
+            
+            # Apply post-request filtering for Later and Inbox
+            if category.lower() == "later":
+                # Filter to items that are saved_for_later=True
+                results = [item for item in results if item.get("saved_for_later", False) is True]
+                logger.debug(f"Filtered to {len(results)} 'later' items")
+            elif category.lower() == "inbox":
+                # Filter to items that are NOT saved_for_later
+                results = [item for item in results if item.get("saved_for_later", False) is not True]
+                logger.debug(f"Filtered to {len(results)} 'inbox' items")
+            
             logger.debug(f"Retrieved {len(results)} articles for category '{category}'")
             
             # Store in cache
@@ -145,7 +153,7 @@ class ReadwiseClient:
         except httpx.HTTPError as e:
             logger.error(f"Error fetching library category: {e}")
             return []
-        
+
     def move_to_category(self, article_id: str, category: str) -> bool:
         """Move article to a different category.
         

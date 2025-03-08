@@ -44,9 +44,12 @@ class RWReader(App[None]):
         ("G", "refresh", "Refresh"),
         ("comma", "refresh", "Refresh"),
         ("q", "quit", "Quit"),
-        ("ctrl+d", "debug_categories", ""),  # Debug categories
-        ("ctrl+a", "debug_article", ""),     # Debug current article
-        ("ctrl+r", "debug_reset_cache", ""), # Reset cache
+
+        # Debug bindings - hidden from help menu
+        ("ctrl+d", "debug_categories", "None"),  # Debug categories
+        ("ctrl+a", "debug_article", "None"),     # Debug current article
+        ("ctrl+r", "debug_reset_cache", "None"), # Reset cache
+        ("ctrl+D", "debug_api", "None"),         # Debug API calls
     ]
     CSS_PATH = ["styles.tcss"]
 
@@ -333,6 +336,112 @@ class RWReader(App[None]):
             logger.error(f"Error toggling archive status: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
 
+
+    async def display_article(self, article_id: str) -> None:
+        """Fetch and display article content."""
+        try:
+            # Fetch the article
+            article = self.client.get_article(article_id=article_id)
+            if not article:
+                self.notify(message=f"Article not found: {article_id}", title="Error", severity="error")
+                return
+                
+            self.current_article = article
+            self.current_article_id = article_id
+            
+            # Get content from article
+            title = article.get("title", "Untitled")
+            
+            # Try different possible content fields
+            content = ""
+            for content_field in ["content", "html", "text", "document"]:
+                if content_field in article and article[content_field]:
+                    content = article[content_field]
+                    break
+                    
+            url = article.get("url", article.get("source_url", ""))
+            author = article.get("author", article.get("creator", ""))
+            site_name = article.get("site_name", article.get("domain", ""))
+            summary = article.get("summary", "")
+            published_date = article.get("published_date", "")
+            word_count = article.get("word_count", 0)
+            category = "Later" if article.get("saved_for_later", False) else "Inbox"
+            category = "Archive" if article.get("archived", False) else category
+            
+            # Log article details for debugging
+            logger.debug(f"Article ID: {article_id}")
+            logger.debug(f"Article archived: {article.get('archived', False)}")
+            logger.debug(f"Article saved_for_later: {article.get('saved_for_later', False)}")
+            logger.debug(f"Determined category: {category}")
+            
+            # Format the markdown content
+            header = f"# {title}\n\n"
+            
+            metadata = []
+            if author:
+                metadata.append(f"*By {author}*")
+            if site_name:
+                metadata.append(f"*From {site_name}*")
+            if published_date:
+                metadata.append(f"*Published: {published_date}*")
+            if word_count:
+                metadata.append(f"*{word_count} words*")
+            metadata.append(f"*Category: {category}*")
+            
+            header += " | ".join(metadata) + "\n\n"
+                
+            if url:
+                header += f"*[Original Article]({url})*\n\n"
+                
+            if summary:
+                header += f"**Summary**: {summary}\n\n"
+                
+            header += "---\n\n"
+            
+            # Add placeholder if no content
+            if not content:
+                content = "*No content available. Try opening the article in browser.*"
+                
+            self.content_markdown = header + content
+            
+            # Display the content using our markdown view
+            content_view = self.query_one("#content", ArticleViewer)
+            content_view.update_content(self.content_markdown)
+            
+            if not content:
+                # Log all keys to help understand the API response
+                logger.debug(f"Full article data: {article}")
+                
+                # Notify the user
+                self.notify(
+                    message="No content found in this article. Try opening in browser.",
+                    title="Article Content",
+                    severity="warning"
+                )
+            
+            # Auto-mark as read if enabled
+            if self.configuration.auto_mark_read and not article.get("read", False) and not article.get("state") == "finished":
+                self.client.mark_as_read(article_id=article_id)
+                
+                # Instead of refreshing the entire list, just update the current item's style
+                if self.current_article_id:
+                    try:
+                        # Find the list item by ID and update its style
+                        article_list_view: ListView = self.query_one("#articles", ListView)
+                        for index, item in enumerate(article_list_view.children):
+                            if hasattr(item, "id") and item.id == f"art_{self.current_article_id}":
+                                item.styles.text_style = "none"
+                                break
+                    except Exception as e:
+                        logger.debug(f"Error updating item style: {e}")
+                        # Fall back to full refresh only if necessary
+                        await self.refresh_articles()
+                
+        except Exception as e:
+            logger.error(f"Error displaying article: {e}")
+            self.notify(message=f"Error displaying article: {e}", title="Error", severity="error")
+
+
     def action_show_metadata(self) -> None:
         """Show detailed metadata for the current article."""
         if not self.current_article:
@@ -491,6 +600,102 @@ class RWReader(App[None]):
         content_view.update_content(self.content_markdown)
         self.current_article = None
         self.current_article_id = None
+
+    async def action_debug_categories(self) -> None:
+        """Debug action to test category functionality."""
+        from ..utils.debug import inspect_readwise_categories, print_api_response
+        
+        self.notify(message="Running category debug...", title="Debug")
+        
+        try:
+            # Test each category
+            categories = ["inbox", "later", "archive"]
+            
+            for category in categories:
+                logger.debug(f"Testing category: {category}")
+                
+                # First, try a direct API call
+                logger.debug(f"Direct API call for {category}")
+                if category == "archive":
+                    response = self.client.session.get(f"{self.client.base_url}books/", 
+                                                    params={"archived": True})
+                elif category == "later":
+                    response = self.client.session.get(f"{self.client.base_url}books/", 
+                                                    params={"archived": False, "saved_for_later": True})
+                else:  # inbox
+                    response = self.client.session.get(f"{self.client.base_url}books/", 
+                                                    params={"archived": False, "saved_for_later": False})
+                    
+                print_api_response(response, f"API response for {category}")
+                
+                # Then try our function
+                logger.debug(f"Testing get_library_by_category for {category}")
+                results = self.client.get_library_by_category(category=category)
+                logger.debug(f"Got {len(results)} results for {category}")
+                
+                # Log a few sample articles
+                for i, article in enumerate(results[:3]):
+                    logger.debug(f"Sample article {i+1} for {category}:")
+                    logger.debug(f"  ID: {article.get('id')}")
+                    logger.debug(f"  Title: {article.get('title', 'Untitled')}")
+                    logger.debug(f"  Archived: {article.get('archived', False)}")
+                    logger.debug(f"  Saved for Later: {article.get('saved_for_later', False)}")
+            
+            self.notify(message="Category debug complete. Check log file.", title="Debug")
+        except Exception as e:
+            logger.error(f"Error in debug_categories: {e}")
+            self.notify(message=f"Error in debug: {e}", title="Debug Error", severity="error")
+
+    async def action_debug_reset_cache(self) -> None:
+        """Debug action to reset the cache and reload everything."""
+        self.notify(message="Resetting cache...", title="Debug")
+        
+        # Clear the client cache
+        self.client.clear_cache()
+        
+        # Clear the current selection
+        self.current_article = None
+        self.current_article_id = None
+        
+        # Reset to inbox view
+        self.current_collection_id = None
+        self.current_view = "inbox"
+        
+        # Refresh collections and articles
+        await self.refresh_collections()
+        await self.refresh_articles()
+        
+        self.notify(message="Cache reset complete.", title="Debug")
+
+    def action_debug_api(self) -> None:
+        """Debug action to test the API directly."""
+        if not hasattr(self.client, 'debug_api_call'):
+            # Add the method to the client if not already there
+            from ..utils.debug import debug_api_call
+            setattr(self.client, 'debug_api_call', debug_api_call.__get__(self.client, type(self.client)))
+        
+        try:
+            # Test basic user info
+            self.notify(message="Testing API...", title="Debug")
+            self.client.debug_api_call("user")
+            
+            # Test books endpoint with various parameters
+            logger.debug("Testing books endpoint with no parameters")
+            self.client.debug_api_call("books")
+            
+            logger.debug("Testing books endpoint with archived=true")
+            self.client.debug_api_call("books", {"archived": True})
+            
+            logger.debug("Testing books endpoint with saved_for_later=true")
+            self.client.debug_api_call("books", {"saved_for_later": True})
+            
+            logger.debug("Testing books endpoint with both parameters")
+            self.client.debug_api_call("books", {"archived": False, "saved_for_later": False})
+            
+            self.notify(message="API tests complete. Check log file.", title="Debug")
+        except Exception as e:
+            logger.error(f"Error in debug_api: {e}")
+            self.notify(message=f"Error in API debug: {e}", title="Debug Error", severity="error")
 
     def on_unmount(self) -> None:
         """Clean up resources when the app is closed."""
