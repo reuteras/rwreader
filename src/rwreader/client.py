@@ -1,195 +1,371 @@
-"""Hybrid client module using both readwise-api and direct API access with rate limiting."""
+"""Client module for Readwise Reader with efficient pagination and performance optimizations."""
 
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import requests
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
-RATE_LIMIT = 429
-
-
-class RateLimiter:
-    """Tracks API requests and handles rate limiting."""
-
-    def __init__(self, requests_per_minute: int = 20) -> None:
-        """Initialize the rate limiter.
-
-        Args:
-            requests_per_minute: Maximum API requests allowed per minute
-        """
-        self.requests_per_minute = requests_per_minute
-        self.request_timestamps: list[float] = []
-        self.retry_after = None
-
-    def wait_if_needed(self) -> None:
-        """Wait if we've hit rate limits or have a retry-after directive."""
-        current_time = time.time()
-
-        # If we have a retry-after directive, honor it
-        if self.retry_after is not None:
-            wait_until = self.retry_after
-            if current_time < wait_until:
-                wait_time = wait_until - current_time
-                logger.info(
-                    f"Rate limit hit: waiting for {wait_time:.2f} seconds per Retry-After header"
-                )
-                time.sleep(wait_time)
-            self.retry_after = None
-
-        # Clear old request timestamps
-        minute_ago = current_time - 60
-        self.request_timestamps = [t for t in self.request_timestamps if t > minute_ago]
-
-        # If we're at or above the limit, wait
-        if len(self.request_timestamps) >= self.requests_per_minute:
-            # Calculate how long until the oldest request is a minute old
-            oldest_timestamp = self.request_timestamps[0]
-            wait_time = (oldest_timestamp + 60) - current_time
-            if wait_time > 0:
-                logger.info(
-                    f"Rate limit approaching: waiting for {wait_time:.2f} seconds"
-                )
-                time.sleep(wait_time)
-
-    def add_request(self) -> None:
-        """Record a new API request."""
-        self.request_timestamps.append(time.time())
-
-    def handle_429(self, response: requests.Response) -> None:
-        """Handle a 429 Too Many Requests response.
-
-        Args:
-            response: The HTTP response with the 429 status
-        """
-        # Parse retry-after header if available
-        retry_after = response.headers.get("Retry-After")
-
-        if retry_after:
-            try:
-                # Retry-After can be seconds or a timestamp
-                seconds = int(retry_after)
-                self.retry_after = time.time() + seconds
-                logger.warning(
-                    f"Rate limit exceeded. Will retry after {seconds} seconds"
-                )
-            except ValueError:
-                # If it's not an integer, it could be HTTP date format
-                # For simplicity, we'll use a default of 60 seconds in this case
-                self.retry_after = time.time() + 60
-                logger.warning("Rate limit exceeded. Using default 60 second wait")
-        else:
-            # Default wait of 60 seconds if Retry-After header is missing
-            self.retry_after = time.time() + 60
-            logger.warning(
-                "Rate limit exceeded with no Retry-After header. Using default 60 second wait"
-            )
-
 
 class ReadwiseClient:
-    """Hybrid client for interacting with the Readwise Reader API with rate limiting."""
+    """Client for interacting with the Readwise Reader API with efficient pagination and caching."""
 
     def __init__(self, token: str, cache_size: int = 1000) -> None:
         """Initialize the Readwise Reader client.
 
         Args:
             token: Readwise API token
-            cache_size: Maximum number of items to store in cache (not used with library)
+            cache_size: Maximum number of items to store in cache
         """
-        # Store token for direct API calls
+        # Store token for API calls
         self.token = token
 
         # Set token environment variable (required by readwise-api)
         os.environ["READWISE_TOKEN"] = token
 
-        # Base URL for direct API calls (v2 for document operations)
-        self.base_url = "https://readwise.io/api/v2/"
+        # Initialize category caches with pagination support
+        self._category_cache = {
+            "inbox": {"data": [], "last_updated": 0, "cursor": None, "complete": False},
+            "later": {"data": [], "last_updated": 0, "cursor": None, "complete": False},
+            "archive": {
+                "data": [],
+                "last_updated": 0,
+                "cursor": None,
+                "complete": False,
+            },
+        }
 
-        # Initialize rate limiter (20 requests per minute per Readwise docs)
-        self.rate_limiter = RateLimiter(requests_per_minute=20)
-
-        logger.debug("Initialized hybrid Readwise client with rate limiting")
-
-        # Initialize category caches
-        self._inbox_cache = None
-        self._later_cache = None
-        self._archive_cache = None
+        # Cache for individual articles
         self._article_cache = {}
 
-    def get_inbox(self) -> list[dict[str, Any]]:
-        """Get articles in the Inbox (unarchived, not saved for later).
+        # Cache expiry time (5 minutes)
+        self._cache_expiry = 300
+
+        # Default page size
+        self._page_size = 25
+
+        # API request timeout (seconds)
+        self._timeout = 10
+
+        # Archive specific settings
+        self._archive_page_size = 20  # Smaller page size for archive to prevent hanging
+        self._max_archive_items = 500  # Safety limit for archive
+
+        # Thread executor for concurrent API requests
+        self._executor = ThreadPoolExecutor(max_workers=3)
+
+        logger.debug(
+            "Initialized Readwise client with pagination and performance optimizations"
+        )
+
+    def _convert_document_to_dict(self, document: Any) -> dict[str, Any]:
+        """Convert a Document object to a dictionary format compatible with the application.
+
+        Args:
+            document: The Document object from readwise-api
+
+        Returns:
+            Article data in dict format
+        """
+        # Convert the document model to our expected dictionary format
+        article_dict = {
+            "id": document.id,
+            "title": document.title,
+            "url": document.url,
+            "author": document.author,
+            "site_name": document.site_name,
+            "word_count": document.word_count,
+            "created_at": document.created_at,
+            "updated_at": document.updated_at,
+            "published_date": document.published_date,
+            "summary": document.summary,
+            "content": document.content,
+            "source_url": document.source_url,
+            # Map location to our internal category system
+            "archived": document.location == "archive",
+            "saved_for_later": document.location == "later",
+            # Add additional fields for compatibility with the existing code
+            "read": document.reading_progress >= 95
+            if document.reading_progress
+            else False,
+            "state": "finished" if document.reading_progress >= 95 else "reading",
+            "reading_progress": document.reading_progress,
+        }
+
+        return article_dict
+
+    def get_inbox(
+        self, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get articles in the Inbox (new location in Readwise).
+
+        Args:
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
 
         Returns:
             List of inbox articles in dict format
         """
-        if self._inbox_cache is not None:
-            logger.debug("Using cached data for inbox")
-            return self._inbox_cache
+        return self._get_category("inbox", refresh=refresh, limit=limit)
 
-        try:
-            logger.debug("Fetching inbox articles")
-            # Use direct API call for more precise filtering
-            params = {"archived": "false", "saved_for_later": "false"}
+    def get_later(
+        self, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get articles in Later.
 
-            articles = self._fetch_articles_with_params(params)
-
-            logger.debug(f"Fetched {len(articles)} inbox articles")
-            self._inbox_cache = articles
-            return articles
-        except Exception as e:
-            logger.error(f"Error fetching inbox: {e}")
-            return []
-
-    def get_later(self) -> list[dict[str, Any]]:
-        """Get articles in Later (unarchived, saved for later).
+        Args:
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
 
         Returns:
             List of later articles in dict format
         """
-        if self._later_cache is not None:
-            logger.debug("Using cached data for later")
-            return self._later_cache
+        return self._get_category("later", refresh=refresh, limit=limit)
 
-        try:
-            logger.debug("Fetching later articles")
-            # Use direct API call for more precise filtering
-            params = {"archived": "false", "saved_for_later": "true"}
+    def get_archive(
+        self, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get articles in the Archive with performance optimizations.
 
-            articles = self._fetch_articles_with_params(params)
-
-            logger.debug(f"Fetched {len(articles)} later articles")
-            self._later_cache = articles
-            return articles
-        except Exception as e:
-            logger.error(f"Error fetching later: {e}")
-            return []
-
-    def get_archive(self) -> list[dict[str, Any]]:
-        """Get articles in the Archive.
+        Args:
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
 
         Returns:
             List of archived articles in dict format
         """
-        if self._archive_cache is not None:
-            logger.debug("Using cached data for archive")
-            return self._archive_cache
+        # Special handling for archive to prevent hanging
+        return self._get_archive_optimized(refresh=refresh, limit=limit)
+
+    def _get_archive_optimized(
+        self, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get archive articles with performance optimizations to prevent hanging.
+
+        Args:
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
+
+        Returns:
+            List of archive articles in dict format
+        """
+        cache = self._category_cache["archive"]
+
+        # Check if we should use the cache
+        current_time = time.time()
+        cache_age = current_time - cache["last_updated"]
+
+        if not refresh and cache["data"] and cache_age < self._cache_expiry:
+            logger.debug(f"Using cached data for archive (age: {cache_age:.1f}s)")
+            return cache["data"][:limit] if limit else cache["data"]
 
         try:
-            logger.debug("Fetching archive articles")
-            # Use direct API call
-            params = {"archived": "true"}
+            # If refreshing, reset the cache
+            if refresh:
+                cache["data"] = []
+                cache["cursor"] = None
+                cache["complete"] = False
 
-            articles = self._fetch_articles_with_params(params)
+            # If we already have complete data, just update the timestamp
+            if cache["complete"]:
+                cache["last_updated"] = current_time
+                return cache["data"][:limit] if limit else cache["data"]
+
+            # Use direct API call for archive to have more control
+            articles = self._fetch_archive_direct_api(
+                limit=limit if limit else self._max_archive_items
+            )
+
+            # Update the cache
+            cache["data"] = articles
+            cache["last_updated"] = current_time
+            cache["complete"] = True
 
             logger.debug(f"Fetched {len(articles)} archive articles")
-            self._archive_cache = articles
-            return articles
+
+            return articles[:limit] if limit else articles
+
         except Exception as e:
             logger.error(f"Error fetching archive: {e}")
-            return []
+            # Return whatever we have in the cache
+            return cache["data"][:limit] if limit else cache["data"]
+
+    def _fetch_archive_direct_api(self, limit: int) -> list[dict[str, Any]]:
+        """Fetch archive articles using direct API calls with pagination.
+
+        Args:
+            limit: Maximum number of items to fetch
+
+        Returns:
+            List of archive articles
+        """
+        articles = []
+        page = 1
+        more_pages = True
+
+        # Base URL and params
+        url = "https://readwise.io/api/v2/books/"
+        params = {"archived": "true", "page_size": self._archive_page_size}
+
+        while more_pages and len(articles) < limit:
+            try:
+                # Add page parameter
+                params["page"] = page
+
+                # Make the request with timeout
+                response = requests.get(
+                    url=url,
+                    headers={"Authorization": f"Token {self.token}"},
+                    params=params,
+                    timeout=self._timeout,
+                )
+
+                # Handle rate limiting
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    logger.warning(f"Rate limit hit, waiting {retry_after} seconds")
+                    time.sleep(retry_after)
+                    continue
+
+                response.raise_for_status()
+
+                data = response.json()
+                results = data.get("results", [])
+
+                # Convert to our format and add to articles list
+                for result in results:
+                    article = {
+                        "id": result.get("id"),
+                        "title": result.get("title", "Untitled"),
+                        "url": result.get("url", ""),
+                        "author": result.get("author", ""),
+                        "site_name": result.get("site_name", ""),
+                        "word_count": result.get("word_count", 0),
+                        "created_at": result.get("created_at", ""),
+                        "updated_at": result.get("updated_at", ""),
+                        "published_date": result.get("published_date", ""),
+                        "summary": result.get("summary", ""),
+                        "content": result.get("content", ""),
+                        "source_url": result.get("source_url", ""),
+                        "archived": True,
+                        "saved_for_later": False,
+                        "read": result.get("state") == "finished",
+                        "state": result.get("state", "reading"),
+                        "reading_progress": result.get("reading_progress", 0),
+                    }
+
+                    articles.append(article)
+
+                    # Also update article cache
+                    self._article_cache[article["id"]] = article
+
+                # Check if there are more pages
+                more_pages = data.get("next") is not None
+
+                # Go to next page
+                page += 1
+
+                # Safety check to prevent hanging
+                if page > 20:  # Limit to 20 pages max
+                    logger.warning("Reached maximum archive page limit")
+                    break
+
+            except Exception as e:
+                logger.error(f"Error fetching archive page {page}: {e}")
+                break
+
+        return articles
+
+    def _get_category(
+        self, category: str, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get articles for a specific category with caching and pagination.
+
+        Args:
+            category: Category to fetch ('inbox' or 'later')
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
+
+        Returns:
+            List of articles in dict format
+        """
+        # Don't use this method for archive
+        if category == "archive":
+            return self._get_archive_optimized(refresh=refresh, limit=limit)
+
+        cache = self._category_cache[category]
+
+        # Check if we should use the cache
+        current_time = time.time()
+        cache_age = current_time - cache["last_updated"]
+
+        if not refresh and cache["data"] and cache_age < self._cache_expiry:
+            logger.debug(f"Using cached data for {category} (age: {cache_age:.1f}s)")
+            return cache["data"][:limit] if limit else cache["data"]
+
+        try:
+            # Map our categories to readwise-api locations
+            location_map = {
+                "inbox": "new",
+                "later": "later",
+            }
+
+            # If refreshing, reset the cache
+            if refresh:
+                cache["data"] = []
+                cache["cursor"] = None
+                cache["complete"] = False
+
+            # If we already have complete data, just update the timestamp
+            if cache["complete"]:
+                cache["last_updated"] = current_time
+                return cache["data"][:limit] if limit else cache["data"]
+
+            # Fetch articles using the readwise-api with a timeout
+            articles = []
+
+            # Import from readwise-api package
+            from readwise import get_documents
+
+            # Use ThreadPoolExecutor to run the API call with a timeout
+            future = self._executor.submit(
+                get_documents, location=location_map[category]
+            )
+
+            # Wait for the result with a timeout
+            try:
+                documents = future.result(timeout=self._timeout)
+
+                # Convert documents to our expected format
+                for doc in documents:
+                    article_dict = self._convert_document_to_dict(doc)
+                    articles.append(article_dict)
+
+                    # Also update the article cache
+                    self._article_cache[doc.id] = article_dict
+
+                # Update the cache
+                cache["data"] = articles
+                cache["last_updated"] = current_time
+                cache["complete"] = True
+
+                logger.debug(f"Fetched {len(articles)} {category} articles")
+
+                return articles[:limit] if limit else articles
+
+            except TimeoutError:
+                logger.error(f"Timeout fetching {category} articles")
+                # Return whatever we have in the cache
+                return cache["data"][:limit] if limit else cache["data"]
+
+        except Exception as e:
+            logger.error(f"Error fetching {category}: {e}")
+            # Return whatever we have in the cache
+            return cache["data"][:limit] if limit else cache["data"]
 
     def get_article(self, article_id: str) -> dict[str, Any] | None:
         """Get full article content.
@@ -200,64 +376,105 @@ class ReadwiseClient:
         Returns:
             Article data in dict format or None if not found
         """
+        # Check if article is in cache
         if article_id in self._article_cache:
             logger.debug(f"Using cached data for article {article_id}")
             return self._article_cache[article_id]
 
-        max_retries = 3
-        for retry in range(max_retries):
+        try:
+            logger.debug(f"Fetching article {article_id}")
+
+            # Try to get the article using the readwise-api first
             try:
-                logger.debug(
-                    f"Fetching article {article_id} (attempt {retry + 1}/{max_retries})"
+                from readwise import get_document_by_id
+
+                # Use ThreadPoolExecutor to run the API call with a timeout
+                future = self._executor.submit(get_document_by_id, article_id)
+
+                # Wait for the result with a timeout
+                document = future.result(timeout=self._timeout)
+
+                if document:
+                    # Convert document to our expected format
+                    article_dict = self._convert_document_to_dict(document)
+
+                    # Store in cache
+                    self._article_cache[article_id] = article_dict
+
+                    logger.debug(f"Successfully fetched article {article_id}")
+                    return article_dict
+            except (ImportError, TimeoutError) as e:
+                logger.warning(
+                    f"Couldn't fetch article with readwise-api: {e}, falling back to direct API"
                 )
+                # Fall back to direct API
+                pass
 
-                # Wait if we need to respect rate limits
-                self.rate_limiter.wait_if_needed()
+            # Direct API fallback
+            max_retries = 3
+            for retry in range(max_retries):
+                try:
+                    # Direct API call to get article
+                    url = f"https://readwise.io/api/v2/books/{article_id}/"
 
-                # Use direct API call for better control
-                url = f"{self.base_url}books/{article_id}/"
+                    response = requests.get(
+                        url=url,
+                        headers={"Authorization": f"Token {self.token}"},
+                        timeout=self._timeout,
+                    )
 
-                response = requests.get(
-                    url, headers={"Authorization": f"Token {self.token}"}
-                )
+                    # Handle rate limiting
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get("Retry-After", 60))
+                        logger.warning(f"Rate limit hit, waiting {retry_after} seconds")
+                        time.sleep(retry_after)
+                        continue
 
-                # Record this request
-                self.rate_limiter.add_request()
+                    response.raise_for_status()
 
-                # Handle rate limiting
-                if response.status_code == RATE_LIMIT:
-                    self.rate_limiter.handle_429(response)
-                    # Continue to the next retry attempt
-                    continue
+                    result = response.json()
 
-                response.raise_for_status()
+                    # Convert to our format
+                    article = {
+                        "id": result.get("id"),
+                        "title": result.get("title", "Untitled"),
+                        "url": result.get("url", ""),
+                        "author": result.get("author", ""),
+                        "site_name": result.get("site_name", ""),
+                        "word_count": result.get("word_count", 0),
+                        "created_at": result.get("created_at", ""),
+                        "updated_at": result.get("updated_at", ""),
+                        "published_date": result.get("published_date", ""),
+                        "summary": result.get("summary", ""),
+                        "content": result.get("content", ""),
+                        "source_url": result.get("source_url", ""),
+                        "archived": result.get("archived", False),
+                        "saved_for_later": result.get("saved_for_later", False),
+                        "read": result.get("state") == "finished",
+                        "state": result.get("state", "reading"),
+                        "reading_progress": result.get("reading_progress", 0),
+                    }
 
-                article = response.json()
+                    # Store in cache
+                    self._article_cache[article_id] = article
 
-                # Store in cache
-                self._article_cache[article_id] = article
-                logger.debug(f"Successfully fetched article {article_id}")
-                return article
+                    logger.debug(
+                        f"Successfully fetched article {article_id} with direct API"
+                    )
+                    return article
 
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == RATE_LIMIT and retry < max_retries - 1:
-                    self.rate_limiter.handle_429(e.response)
-                    continue
-                logger.error(f"HTTP error fetching article {article_id}: {e}")
-                return None
-            except Exception as e:
-                logger.error(f"Error fetching article {article_id}: {e}")
-                if retry < max_retries - 1:
-                    wait_time = (retry + 1) * 2  # Exponential backoff
-                    logger.info(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                else:
-                    return None
+                except Exception as e:
+                    logger.error(
+                        f"Error in attempt {retry + 1} to fetch article {article_id}: {e}"
+                    )
+                    if retry < max_retries - 1:
+                        time.sleep(1)  # Small delay before retry
 
-        logger.error(
-            f"Failed to fetch article {article_id} after {max_retries} attempts"
-        )
-        return None
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching article {article_id}: {e}")
+            return None
 
     def move_to_inbox(self, article_id: str) -> bool:
         """Move article to Inbox.
@@ -268,9 +485,12 @@ class ReadwiseClient:
         Returns:
             True if successful, False otherwise
         """
-        return self._update_article(
+        result = self._update_article(
             article_id=article_id, data={"archived": False, "saved_for_later": False}
         )
+        if result:
+            self._invalidate_cache()
+        return result
 
     def move_to_later(self, article_id: str) -> bool:
         """Move article to Later.
@@ -281,9 +501,12 @@ class ReadwiseClient:
         Returns:
             True if successful, False otherwise
         """
-        return self._update_article(
+        result = self._update_article(
             article_id, {"archived": False, "saved_for_later": True}
         )
+        if result:
+            self._invalidate_cache()
+        return result
 
     def move_to_archive(self, article_id: str) -> bool:
         """Move article to Archive.
@@ -294,7 +517,10 @@ class ReadwiseClient:
         Returns:
             True if successful, False otherwise
         """
-        return self._update_article(article_id=article_id, data={"archived": True})
+        result = self._update_article(article_id=article_id, data={"archived": True})
+        if result:
+            self._invalidate_cache()
+        return result
 
     def toggle_read(self, article_id: str, read: bool) -> bool:
         """Toggle read/unread status of an article.
@@ -306,9 +532,16 @@ class ReadwiseClient:
         Returns:
             True if successful, False otherwise
         """
-        return self._update_article(
+        result = self._update_article(
             article_id=article_id, data={"state": "finished" if read else "reading"}
         )
+
+        # Update the article in the cache if it exists
+        if result and article_id in self._article_cache:
+            self._article_cache[article_id]["read"] = read
+            self._article_cache[article_id]["state"] = "finished" if read else "reading"
+
+        return result
 
     def _update_article(self, article_id: str, data: dict[str, Any]) -> bool:
         """Update an article with the given data.
@@ -327,23 +560,21 @@ class ReadwiseClient:
                     msg=f"Updating article {article_id} with data: {data} (attempt {retry + 1}/{max_retries})"
                 )
 
-                # Wait if we need to respect rate limits
-                self.rate_limiter.wait_if_needed()
-
                 # Direct API call to update the article
-                url: str = f"{self.base_url}books/{article_id}/"
+                url: str = f"https://readwise.io/api/v2/books/{article_id}/"
 
                 response: requests.Response = requests.patch(
-                    url=url, headers={"Authorization": f"Token {self.token}"}, json=data
+                    url=url,
+                    headers={"Authorization": f"Token {self.token}"},
+                    json=data,
+                    timeout=self._timeout,
                 )
 
-                # Record this request
-                self.rate_limiter.add_request()
-
                 # Handle rate limiting
-                if response.status_code == RATE_LIMIT:
-                    self.rate_limiter.handle_429(response)
-                    # Continue to the next retry attempt
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    logger.warning(f"Rate limit hit, waiting {retry_after} seconds")
+                    time.sleep(retry_after)
                     continue
 
                 response.raise_for_status()
@@ -359,15 +590,14 @@ class ReadwiseClient:
                             data["state"] == "finished"
                         )
 
-                # Invalidate category caches
-                self._invalidate_cache()
-
                 logger.debug(f"Successfully updated article {article_id}")
                 return True
 
             except requests.exceptions.HTTPError as e:
-                if e.response.status_code == RATE_LIMIT and retry < max_retries - 1:
-                    self.rate_limiter.handle_429(e.response)
+                if e.response.status_code == 429 and retry < max_retries - 1:
+                    retry_after = int(e.response.headers.get("Retry-After", 60))
+                    logger.warning(f"Rate limit hit, waiting {retry_after} seconds")
+                    time.sleep(retry_after)
                     continue
                 logger.error(msg=f"HTTP error updating article {article_id}: {e}")
                 return False
@@ -385,72 +615,39 @@ class ReadwiseClient:
         )
         return False
 
-    def _fetch_articles_with_params(
-        self, params: dict[str, str]
-    ) -> list[dict[str, Any]]:
-        """Fetch articles with the given parameters.
+    def get_more_articles(self, category: str) -> list[dict[str, Any]]:
+        """Get the next page of articles for a category.
 
         Args:
-            params: Query parameters
+            category: Category to fetch more articles for
 
         Returns:
-            List of articles
+            List of newly loaded articles
         """
-        url: str = f"{self.base_url}books/"
-        articles = []
+        # Force a full refresh
+        self._invalidate_cache_for_category(category)
+        return self._get_category(category)
 
-        try:
-            # Add page size parameter
-            params["page_size"] = "50"
+    def _invalidate_cache_for_category(self, category: str) -> None:
+        """Invalidate cache for a specific category.
 
-            # Make initial request with rate limiting
-            next_url: str = url
-            while next_url:
-                # Respect rate limits
-                self.rate_limiter.wait_if_needed()
-
-                # Make the request
-                if next_url == url:
-                    # First request - include parameters
-                    response: requests.Response = requests.get(
-                        url=url,
-                        headers={"Authorization": f"Token {self.token}"},
-                        params=params,
-                    )
-                else:
-                    # Pagination - use the full URL
-                    response = requests.get(
-                        url=next_url, headers={"Authorization": f"Token {self.token}"}
-                    )
-
-                # Record this request
-                self.rate_limiter.add_request()
-
-                # Handle rate limiting
-                if response.status_code == RATE_LIMIT:
-                    self.rate_limiter.handle_429(response)
-                    # Don't update the URL, retry the same request
-                    continue
-
-                response.raise_for_status()
-
-                data = response.json()
-                articles.extend(data.get("results", []))
-
-                # Get the next URL for pagination
-                next_url = data.get("next")
-
-            return articles
-        except Exception as e:
-            logger.error(f"Error fetching articles: {e}")
-            raise
+        Args:
+            category: Category to invalidate
+        """
+        if category in self._category_cache:
+            self._category_cache[category] = {
+                "data": [],
+                "last_updated": 0,
+                "cursor": None,
+                "complete": False,
+            }
+            logger.debug(f"Invalidated cache for {category}")
 
     def _invalidate_cache(self) -> None:
         """Invalidate all caches."""
         logger.debug("Invalidating all caches")
-        self._inbox_cache = None
-        self._later_cache = None
-        self._archive_cache = None
+        for category in self._category_cache:
+            self._invalidate_cache_for_category(category)
 
     def clear_cache(self) -> None:
         """Clear the entire cache."""
@@ -459,6 +656,9 @@ class ReadwiseClient:
         logger.debug("Cleared entire cache")
 
     def close(self) -> None:
-        """Close the client (if needed)."""
-        # No resources to clean up
-        logger.debug("Closed client")
+        """Close the client and clean up resources."""
+        try:
+            self._executor.shutdown(wait=False)
+            logger.debug("Closed client and thread executor")
+        except Exception as e:
+            logger.error(f"Error shutting down executor: {e}")

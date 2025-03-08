@@ -20,7 +20,7 @@ from textual.widgets import (
 )
 
 # Import our improved client
-from ..client_improved import ImprovedReadwiseClient as ReadwiseClient
+from ..client import ReadwiseClient
 from ..config import Configuration
 from ..utils.ui_helpers import (
     format_article_content,
@@ -96,7 +96,7 @@ class RWReader(App[None]):
             self.content_markdown: str = (
                 "# Welcome to Readwise Reader TUI\n\nSelect an article to read."
             )
-            
+
             # Progressive loading state
             self.is_loading: bool = False
             self.initial_page_size: int = 20  # Number of items to load initially
@@ -239,7 +239,7 @@ class RWReader(App[None]):
 
             # Load article content
             await self.display_article(article_id)
-            
+
         # Check if this is the load more button
         elif highlighted_item.id == "load_more_item":
             await self.action_load_more()
@@ -444,61 +444,61 @@ class RWReader(App[None]):
         """Load more articles for the current category."""
         if self.is_loading:
             return
-            
+
         try:
             self.is_loading = True
-            
+
             # Show loading indicator
             loading_indicator = self.query_one("#loading_indicator", LoadingIndicator)
             loading_indicator.display = True
-            
+
             # Hide load more button while loading
             load_more = self.query_one("#load_more", LoadMoreWidget)
             load_more.display = False
-            
+
             # Get more articles
             more_articles = self.client.get_more_articles(self.current_category)
-            
+
             # Get the current list of articles
             articles_list = self.query_one("#articles", ListView)
-            
+
             # Get the current item count
             current_count = len(articles_list.children)
             if current_count > 0:  # Subtract header if present
                 current_count -= 1
-                
+
             # Calculate how many new articles we got
             new_articles = more_articles[current_count:]
-            
+
             # Add new articles to the list
             for article in new_articles:
                 await self.add_article_to_list(article, articles_list)
-                
+
             # Update loaded count
             self.items_loaded[self.current_category] = len(more_articles)
-            
+
             # Show load more button if there are more articles
             load_more.display = len(new_articles) > 0
-            
+
             # Update notification
             self.notify(
-                message=f"Loaded {len(new_articles)} more articles", 
-                title=f"{self.current_category.capitalize()}"
+                message=f"Loaded {len(new_articles)} more articles",
+                title=f"{self.current_category.capitalize()}",
             )
-            
+
         except Exception as e:
             logger.error(f"Error loading more articles: {e}")
             self.notify(
-                message=f"Error loading more articles: {e}", 
-                title="Error", 
-                severity="error"
+                message=f"Error loading more articles: {e}",
+                title="Error",
+                severity="error",
             )
         finally:
             # Hide loading indicator
             loading_indicator = self.query_one("#loading_indicator", LoadingIndicator)
             loading_indicator.display = False
             self.is_loading = False
-            
+
     def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
         panes: list[str] = ["navigation", "articles", "content"]
@@ -585,47 +585,52 @@ class RWReader(App[None]):
             if initial_load:
                 self.current_article = None
                 self.current_article_id = None
-            
+
             # Show loading indicator if this is an initial load
             loading_indicator = self.query_one("#loading_indicator", LoadingIndicator)
             if initial_load:
                 loading_indicator.display = True
-                
+
             # Update the articles list
             articles_list = self.query_one("#articles", ListView)
-            
+
             # Clear the list if this is an initial load
             if initial_load:
                 await articles_list.clear()
-                
+
                 # Add category header - IMPORTANT: disable markup
                 header_text = category.capitalize()
                 articles_list.append(
                     ListItem(
-                        Static(f"{header_text.upper()} ARTICLES", markup=False), id="header"
+                        Static(f"{header_text.upper()} ARTICLES", markup=False),
+                        id="header",
                     )
                 )
-                
+
                 # Reset the loaded count for this category
                 self.items_loaded[category] = 0
 
                 # Notify user we're loading
-                self.notify(message=f"Loading {header_text} articles...", title="Loading")
+                self.notify(
+                    message=f"Loading {header_text} articles...", title="Loading"
+                )
 
             # Get articles for the selected category with limit for fast initial loading
             articles = []
             page_size: int = self.initial_page_size if initial_load else 0
-            
+
             if category == "inbox":
                 articles = self.client.get_inbox(refresh=initial_load, limit=page_size)
             elif category == "later":
                 articles = self.client.get_later(refresh=initial_load, limit=page_size)
             elif category == "archive":
-                articles = self.client.get_archive(refresh=initial_load, limit=page_size)
+                articles = self.client.get_archive(
+                    refresh=initial_load, limit=page_size
+                )
 
             # Update loaded count
             self.items_loaded[category] = len(articles)
-            
+
             # Add each article to the list
             if initial_load:
                 for article in articles:
@@ -634,9 +639,13 @@ class RWReader(App[None]):
                 # For load_more, we only add articles that aren't already in the list
                 current_ids = set()
                 for item in articles_list.children:
-                    if hasattr(item, "id") and item.id is not None and item.id.startswith("art_"):
+                    if (
+                        hasattr(item, "id")
+                        and item.id is not None
+                        and item.id.startswith("art_")
+                    ):
                         current_ids.add(item.id.replace("art_", ""))
-                        
+
                 for article in articles:
                     if article["id"] not in current_ids:
                         await self.add_article_to_list(article, articles_list)

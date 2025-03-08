@@ -1,6 +1,6 @@
 """Load more widget for progressive loading."""
 
-from textual.widgets import Static, ListView, ListItem
+from textual.widgets import ListItem, Static
 
 
 class LoadMoreWidget(Static):
@@ -30,9 +30,11 @@ class LoadMoreWidget(Static):
 
     def update_load_more(self) -> None:
         """Update the load more button content."""
-        list_item = ListItem(Static("Load More... (press SPACE)", markup=False), id="load_more_item")
+        ListItem(
+            Static("Load More... (press SPACE)", markup=False), id="load_more_item"
+        )
         self.update("Load More... (press SPACE)")
-        
+
     def on_click(self) -> None:
         """Handle click events."""
         # Dispatch load_more action to the app
