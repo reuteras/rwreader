@@ -45,6 +45,7 @@ HELP_TEXT = """# Readwise Reader TUI Help
 Readwise Reader TUI is a terminal user interface for accessing your Readwise Reader library.
 """
 
+
 class HelpScreen(Screen):
     """A screen that displays help information."""
 

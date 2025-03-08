@@ -2,12 +2,11 @@
 
 import argparse
 import logging
-import os
 import subprocess
 import sys
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import toml
 
@@ -31,6 +30,7 @@ token = "your_readwise_token"  # Or use 1Password CLI integration
 font_size = "medium"  # small, medium, large
 reading_width = 80    # characters
 """
+
 
 def get_conf_value(op_command: str) -> str:
     """Get the configuration value from 1Password if config starts with 'op '.
@@ -69,15 +69,15 @@ def get_conf_value(op_command: str) -> str:
 class Configuration:
     """A class to handle configuration values."""
 
-    def __init__(self, arguments: Optional[list] = None) -> None:
+    def __init__(self, arguments=None) -> None:  # noqa: PLR0915
         """Initialize the configuration.
 
         Args:
             arguments: Command line arguments
         """
         if arguments is None:
-            arguments = sys.argv[1:]
-            
+            arguments: list[str] = sys.argv[1:]
+
         # Use argparse to add arguments
         arg_parser = argparse.ArgumentParser(
             description="A Textual app to read and manage your Readwise Reader library."
@@ -163,7 +163,7 @@ class Configuration:
             sys.exit(0)
 
         # Load the configuration file
-        self.config: Dict[str, Any] = self.load_config_file(config_file=args.config)
+        self.config: dict[str, Any] = self.load_config_file(config_file=args.config)
 
         try:
             # Get Readwise token
@@ -187,13 +187,13 @@ class Configuration:
                 self.version: str = metadata.version(distribution_name="rwreader")
             except Exception:
                 self.version = "0.1.0"  # Default version if not installed
-                
+
         except KeyError as err:
             logger.error(f"Error reading configuration: {err}")
             print(f"Error reading configuration: {err}")
             sys.exit(1)
 
-    def load_config_file(self, config_file: str) -> Dict[str, Any]:
+    def load_config_file(self, config_file: str) -> dict[str, Any]:
         """Load the configuration from the TOML file.
 
         Args:
@@ -207,9 +207,13 @@ class Configuration:
         try:
             if not config_path.exists():
                 # If config file doesn't exist, create it from the default config
-                print(f"Config file {config_file} not found. Creating with default settings.")
+                print(
+                    f"Config file {config_file} not found. Creating with default settings."
+                )
                 config_path.write_text(data=DEFAULT_CONFIG)
-                print(f"Created {config_file} with default settings. Please edit it with your settings.")
+                print(
+                    f"Created {config_file} with default settings. Please edit it with your settings."
+                )
                 sys.exit(1)
 
             return toml.loads(s=config_path.read_text())
