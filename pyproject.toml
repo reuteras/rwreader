@@ -10,7 +10,7 @@ authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -24,6 +24,9 @@ dependencies = [
     "httpx>=0.24.0",
     "toml>=0.10.2",
     "rich>=13.3.5",
+    "readwise-api>=0.3.0",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
 ]
 
 [project.scripts]

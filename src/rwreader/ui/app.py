@@ -1,4 +1,4 @@
-"""Main application class for rwreader."""
+"""Simplified application class for rwreader."""
 
 import logging
 import sys
@@ -7,8 +7,8 @@ from typing import Any, ClassVar, Dict, Optional
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.widgets import Footer, Header, ListItem, ListView, Static, Tree
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, ListItem, ListView, Static
 
 from ..client import ReadwiseClient
 from ..config import Configuration
@@ -16,7 +16,6 @@ from .widgets.article_viewer import ArticleViewer
 from .screens.help import HelpScreen
 
 logger: logging.Logger = logging.getLogger(name=__name__)
-
 
 class RWReader(App[None]):
     """A Textual app for Readwise Reader."""
@@ -30,7 +29,7 @@ class RWReader(App[None]):
         
         # Article actions
         ("r", "toggle_read", "Toggle read/unread"),
-        ("a", "toggle_archive", "Toggle archive"),
+        ("a", "move_to_archive", "Move to Archive"),
         ("l", "move_to_later", "Move to Later"),
         ("i", "move_to_inbox", "Move to Inbox"),
         ("o", "open_in_browser", "Open in browser"),
@@ -44,13 +43,12 @@ class RWReader(App[None]):
         ("G", "refresh", "Refresh"),
         ("comma", "refresh", "Refresh"),
         ("q", "quit", "Quit"),
-
-        # Debug bindings - hidden from help menu
-        ("ctrl+d", "debug_categories", "None"),  # Debug categories
-        ("ctrl+a", "debug_article", "None"),     # Debug current article
-        ("ctrl+r", "debug_reset_cache", "None"), # Reset cache
-        ("ctrl+D", "debug_api", "None"),         # Debug API calls
+        
+        # Debug - hidden from help
+        ("ctrl+d", "debug_dump", None),  # Dump debug info
+        ("ctrl+r", "debug_reset_cache", None),  # Reset cache
     ]
+    
     CSS_PATH = ["styles.tcss"]
 
     def __init__(self) -> None:
@@ -77,20 +75,20 @@ class RWReader(App[None]):
             # State variables
             self.current_article_id: Optional[str] = None
             self.current_article: Optional[Dict[str, Any]] = None
-            self.current_collection_id: Optional[str] = None
-            self.current_view: str = "library"  # "library" or "collection"
+            self.current_category: str = "inbox"  # Default category
             self.content_markdown: str = "# Welcome to Readwise Reader TUI\n\nSelect an article to read."
             
+            logger.debug("RWReader initialized")
         except Exception as e:
             logger.error(f"Initialization error: {e}")
             print(f"Error: {e}")
             sys.exit(1)
 
     def compose(self) -> ComposeResult:
-        """Compose the three-pane layout."""
+        """Compose the three-pane layout using ListView for navigation."""
         yield Header(show_clock=True)
         with Horizontal():
-            yield ListView(id="collections")
+            yield ListView(id="navigation")
             with Vertical():
                 yield ListView(id="articles")
                 yield ArticleViewer(markdown=self.content_markdown, id="content")
@@ -98,244 +96,101 @@ class RWReader(App[None]):
 
     async def on_mount(self) -> None:
         """Load library data when the app is mounted."""
-        await self.refresh_collections()
-        await self.refresh_articles()
+        logger.debug("App mounted")
+        
+        # Set up navigation list
+        nav_list = self.query_one("#navigation", ListView)
+        
+        # Add header
+        nav_list.append(ListItem(Static("LIBRARY"), id="nav_header"))
+        
+        # Add category items with data attributes
+        inbox_item = ListItem(Static("Inbox"), id="nav_inbox")
+        inbox_item.data = {"category": "inbox"}
+        
+        later_item = ListItem(Static("Later"), id="nav_later")
+        later_item.data = {"category": "later"}
+        
+        archive_item = ListItem(Static("Archive"), id="nav_archive")
+        archive_item.data = {"category": "archive"}
+        
+        # Add items to the list
+        nav_list.append(inbox_item)
+        nav_list.append(later_item)
+        nav_list.append(archive_item)
+        
+        # Focus on the navigation list
+        nav_list.focus()
+        
+        # Load initial articles
+        await self.load_category("inbox")
+        
+        logger.debug("Initial app loading complete")
 
-    async def refresh_collections(self) -> None:
-        """Load collections from Readwise."""
-        try:
-            # Get the collections list view
-            list_view: ListView = self.query_one("#collections", ListView)
-            await list_view.clear()
+    async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        """Handle tree node selection."""
+        if event.node.data and "category" in event.node.data:
+            category = event.node.data["category"]
+            logger.debug(f"Category selected: {category}")
             
-            # Add library sections
-            list_view.append(ListItem(Static("LIBRARY"), id="lib_header"))
-            list_view.append(ListItem(Static("Inbox"), id="lib_inbox"))
-            list_view.append(ListItem(Static("Later"), id="lib_later"))
-            list_view.append(ListItem(Static("Archive"), id="lib_archive"))
-            
-            # Add collections
-            collections = self.client.get_collections()
-            if collections:
-                list_view.append(ListItem(Static("COLLECTIONS"), id="col_header"))
-                
-                # Keep track of used IDs to avoid duplicates
-                used_ids = set()
-                
-                for index, collection in enumerate(collections):
-                    collection_id = collection.get("id")
-                    collection_name = collection.get("name", "Unnamed Collection")
-                    
-                    # Create a unique ID if none exists or is duplicate
-                    if not collection_id or f"col_{collection_id}" in used_ids:
-                        collection_id = f"custom_{index}"
-                        
-                    item_id = f"col_{collection_id}"
-                    used_ids.add(item_id)
-                    
-                    list_view.append(ListItem(Static(collection_name), id=item_id))
-        except Exception as e:
-            logger.error(f"Error refreshing collections: {e}")
-            self.notify(message=f"Error refreshing collections: {e}", title="Error", severity="error")
+            # Update current category and load articles
+            self.current_category = category
+            await self.load_category(category)
 
-    async def refresh_articles(self) -> None:
-        """Load articles based on current view."""
-        try:
-            # Get the articles list view
-            list_view: ListView = self.query_one("#articles", ListView)
-            await list_view.clear()
+    async def add_article_to_list(self, article: Dict[str, Any], list_view: ListView) -> None:
+        """Add an article to the list view."""
+        article_id = article.get("id")
+        title = article.get("title", "Untitled")
+        site_name = article.get("site_name", "")
+        reading_progress = article.get("reading_progress", 0)
+        is_read = article.get("read", False) or article.get("state") == "finished"
+        
+        # Format the title with metadata
+        display_title = title
+        if site_name:
+            display_title += f" ({site_name})"
+        
+        # Add reading progress or read status
+        if reading_progress > 0 and reading_progress < 100:
+            display_title += f" - {reading_progress}%"
+        elif is_read:
+            display_title += " - Read"
             
-            # Display the current view in the header of the articles panel
-            header_text = "Articles"
-            if self.current_view == "inbox":
-                header_text = "Inbox"
-            elif self.current_view == "later":
-                header_text = "Later"
-            elif self.current_view == "archive":
-                header_text = "Archive"
-            elif self.current_view == "collection" and self.current_collection_id:
-                # Try to find collection name
-                for collection in self.client.get_collections():
-                    if str(collection.get("id")) == str(self.current_collection_id):
-                        header_text = f"Collection: {collection.get('name', 'Unknown')}"
-                        break
+        # Create the list item
+        list_item = ListItem(Static(display_title), id=f"art_{article_id}")
+        
+        # Style based on read status
+        if is_read:
+            list_item.styles.text_style = "none"
+        else:
+            list_item.styles.text_style = "bold"
             
-            # Add a header item
-            list_view.append(ListItem(Static(header_text.upper()), id="art_header"))
-            
-            articles = []
-            
-            # Load articles based on current view
-            if self.current_view == "inbox":
-                self.notify(message="Loading Inbox articles...", title="Loading")
-                articles = self.client.get_library_by_category(category="inbox")
-            elif self.current_view == "later":
-                self.notify(message="Loading Later articles...", title="Loading")
-                articles = self.client.get_library_by_category(category="later")
-            elif self.current_view == "archive":
-                self.notify(message="Loading Archive articles...", title="Loading")
-                articles = self.client.get_library_by_category(category="archive")
-            elif self.current_view == "collection" and self.current_collection_id:
-                self.notify(message="Loading collection articles...", title="Loading")
-                articles = self.client.get_collection_items(collection_id=self.current_collection_id)
-            
-            self.notify(message=f"Loaded {len(articles)} articles", title="Loading Complete")
-            logger.debug(f"Loaded {len(articles)} articles for view '{self.current_view}'")
-            
-            # Add articles to the list view
-            for article in articles:
-                article_id = article.get("id")
-                title = article.get("title", "Untitled")
-                site_name = article.get("site_name", "")
-                reading_progress = article.get("reading_progress", 0)
-                is_read = article.get("read", False) or article.get("state") == "finished"
-                saved_for_later = article.get("saved_for_later", False)
-                
-                # Format the title with metadata
-                display_title = title
-                if site_name:
-                    display_title += f" ({site_name})"
-                
-                if reading_progress > 0 and reading_progress < 100:
-                    display_title += f" - {reading_progress}%"
-                elif is_read:
-                    display_title += " - Read"
-                    
-                if saved_for_later and self.current_view != "later":
-                    display_title += " - Later"
-                
-                # Create and append list item
-                list_item = ListItem(Static(display_title), id=f"art_{article_id}")
-                if is_read:
-                    list_item.styles.text_style = "none"
-                else:
-                    list_item.styles.text_style = "bold"
-                    
-                list_view.append(list_item)
-                
-        except Exception as e:
-            logger.error(f"Error refreshing articles: {e}")
-            self.notify(message=f"Error refreshing articles: {e}", title="Error", severity="error")
+        # Add to the list
+        list_view.append(list_item)
 
     async def on_list_view_highlighted(self, message: Any) -> None:
         """Handle list view item highlighting."""
         highlighted_item = message.item
-        if highlighted_item is None:
+        if not highlighted_item or not hasattr(highlighted_item, "id"):
             return
-
-        try:
-            # Handle collection/category selection
-            if hasattr(highlighted_item, "id") and highlighted_item.id is not None:
-                if highlighted_item.id.startswith("col_"):
-                    collection_id = highlighted_item.id.replace("col_", "")
-                    self.current_collection_id = collection_id
-                    self.current_view = "collection"
-                    self.notify(message=f"Loading collection...", title="Collection")
-                    await self.refresh_articles()
-                elif highlighted_item.id == "lib_inbox":
-                    self.current_collection_id = None
-                    self.current_view = "inbox"
-                    self.notify(message=f"Loading Inbox...", title="Inbox")
-                    await self.refresh_articles()
-                elif highlighted_item.id == "lib_later":
-                    self.current_collection_id = None
-                    self.current_view = "later"
-                    self.notify(message=f"Loading Later...", title="Later")
-                    await self.refresh_articles()
-                elif highlighted_item.id == "lib_archive":
-                    self.current_collection_id = None
-                    self.current_view = "archive"
-                    self.notify(message=f"Loading Archive...", title="Archive")
-                    await self.refresh_articles()
-                # Handle article selection
-                elif highlighted_item.id.startswith("art_") and highlighted_item.id != "art_header":
-                    article_id = highlighted_item.id.replace("art_", "")
-                    self.current_article_id = article_id
-                    await self.display_article(article_id=article_id)
-        except Exception as e:
-            logger.error(f"Error handling list view highlight: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
-    def action_debug_article(self) -> None:
-        """Debug action to dump current article data to log file."""
-        if not self.current_article:
-            self.notify(message="No article selected", title="Debug")
-            return
+            
+        # Check if this is a navigation item
+        if highlighted_item.id.startswith("nav_") and highlighted_item.id != "nav_header":
+            if hasattr(highlighted_item, "data") and isinstance(highlighted_item.data, dict) and "category" in highlighted_item.data:
+                category = highlighted_item.data["category"]
+                logger.debug(f"Category selected: {category}")
+                
+                # Update current category and load articles
+                self.current_category = category
+                await self.load_category(category)
         
-        try:
-            # Log the full article data
-            logger.debug(f"Full article data: {self.current_article}")
+        # Check if this is an article
+        elif highlighted_item.id.startswith("art_") and highlighted_item.id != "header":
+            article_id = highlighted_item.id.replace("art_", "")
+            logger.debug(f"Article highlighted: {article_id}")
             
-            # Notify the user
-            self.notify(message="Article data logged to debug file", title="Debug")
-        except Exception as e:
-            logger.error(f"Error in debug action: {e}")
-            
-    async def action_move_to_inbox(self) -> None:
-        """Move the current article to Inbox."""
-        if not self.current_article_id:
-            self.notify(message="No article selected", title="Error", severity="warning")
-            return
-            
-        try:
-            if self.client.move_to_category(article_id=self.current_article_id, category="inbox"):
-                self.notify(message="Moved to Inbox", title="Article Status")
-                await self.refresh_articles()
-                
-                # Refresh the article view to update metadata
-                if self.current_article_id:
-                    await self.display_article(article_id=self.current_article_id)
-            else:
-                self.notify(message="Failed to move to Inbox", title="Error", severity="error")
-        except Exception as e:
-            logger.error(f"Error moving article to Inbox: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
-    async def action_move_to_later(self) -> None:
-        """Move the current article to Later."""
-        if not self.current_article_id:
-            self.notify(message="No article selected", title="Error", severity="warning")
-            return
-            
-        try:
-            if self.client.move_to_category(article_id=self.current_article_id, category="later"):
-                self.notify(message="Moved to Later", title="Article Status")
-                await self.refresh_articles()
-                
-                # Refresh the article view to update metadata
-                if self.current_article_id:
-                    await self.display_article(article_id=self.current_article_id)
-            else:
-                self.notify(message="Failed to move to Later", title="Error", severity="error")
-        except Exception as e:
-            logger.error(f"Error moving article to Later: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
-    async def action_toggle_archive(self) -> None:
-        """Toggle archive status of the current article."""
-        if not self.current_article_id:
-            self.notify(message="No article selected", title="Error", severity="warning")
-            return
-            
-        try:
-            is_archived = self.current_article and self.current_article.get("archived", False)
-            if is_archived:
-                self.client.unarchive_article(article_id=self.current_article_id)
-                self.notify(message="Unarchived article", title="Article Status")
-            else:
-                self.client.archive_article(article_id=self.current_article_id)
-                self.notify(message="Archived article", title="Article Status")
-                
-            # Refresh the articles list to update the UI
-            await self.refresh_articles()
-            
-            # Refresh the article view to update metadata
-            if self.current_article_id:
-                await self.display_article(article_id=self.current_article_id)
-        except Exception as e:
-            logger.error(f"Error toggling archive status: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
+            # Load article content
+            await self.display_article(article_id)
 
     async def display_article(self, article_id: str) -> None:
         """Fetch and display article content."""
@@ -346,37 +201,37 @@ class RWReader(App[None]):
                 self.notify(message=f"Article not found: {article_id}", title="Error", severity="error")
                 return
                 
+            # Update state
             self.current_article = article
             self.current_article_id = article_id
             
-            # Get content from article
+            # Extract article details
             title = article.get("title", "Untitled")
+            content = ""
             
             # Try different possible content fields
-            content = ""
             for content_field in ["content", "html", "text", "document"]:
                 if content_field in article and article[content_field]:
                     content = article[content_field]
                     break
-                    
+            
+            # Get metadata
             url = article.get("url", article.get("source_url", ""))
             author = article.get("author", article.get("creator", ""))
             site_name = article.get("site_name", article.get("domain", ""))
             summary = article.get("summary", "")
             published_date = article.get("published_date", "")
             word_count = article.get("word_count", 0)
-            category = "Later" if article.get("saved_for_later", False) else "Inbox"
-            category = "Archive" if article.get("archived", False) else category
             
-            # Log article details for debugging
-            logger.debug(f"Article ID: {article_id}")
-            logger.debug(f"Article archived: {article.get('archived', False)}")
-            logger.debug(f"Article saved_for_later: {article.get('saved_for_later', False)}")
-            logger.debug(f"Determined category: {category}")
+            # Determine category
+            category = "Archive" if article.get("archived", True) else (
+                "Later" if article.get("saved_for_later", False) else "Inbox"
+            )
             
-            # Format the markdown content
+            # Format markdown content
             header = f"# {title}\n\n"
             
+            # Add metadata
             metadata = []
             if author:
                 metadata.append(f"*By {author}*")
@@ -404,43 +259,43 @@ class RWReader(App[None]):
                 
             self.content_markdown = header + content
             
-            # Display the content using our markdown view
+            # Display content
             content_view = self.query_one("#content", ArticleViewer)
             content_view.update_content(self.content_markdown)
             
-            if not content:
-                # Log all keys to help understand the API response
-                logger.debug(f"Full article data: {article}")
-                
-                # Notify the user
-                self.notify(
-                    message="No content found in this article. Try opening in browser.",
-                    title="Article Content",
-                    severity="warning"
-                )
-            
             # Auto-mark as read if enabled
             if self.configuration.auto_mark_read and not article.get("read", False) and not article.get("state") == "finished":
-                self.client.mark_as_read(article_id=article_id)
+                logger.debug(f"Auto-marking article {article_id} as read")
+                self.client.toggle_read(article_id=article_id, read=True)
                 
-                # Instead of refreshing the entire list, just update the current item's style
-                if self.current_article_id:
-                    try:
-                        # Find the list item by ID and update its style
-                        article_list_view: ListView = self.query_one("#articles", ListView)
-                        for index, item in enumerate(article_list_view.children):
-                            if hasattr(item, "id") and item.id == f"art_{self.current_article_id}":
-                                item.styles.text_style = "none"
-                                break
-                    except Exception as e:
-                        logger.debug(f"Error updating item style: {e}")
-                        # Fall back to full refresh only if necessary
-                        await self.refresh_articles()
-                
+                # Update item style without refreshing everything
+                articles_list = self.query_one("#articles", ListView)
+                for item in articles_list.children:
+                    if hasattr(item, "id") and item.id == f"art_{article_id}":
+                        item.styles.text_style = "none"
+                        break
         except Exception as e:
             logger.error(f"Error displaying article: {e}")
             self.notify(message=f"Error displaying article: {e}", title="Error", severity="error")
 
+    def action_open_in_browser(self) -> None:
+        """Open the current article in a web browser."""
+        if not self.current_article:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        url = self.current_article.get("url")
+        if not url:
+            self.notify(message="No URL available for this article", title="Error", severity="warning")
+            return
+            
+        try:
+            logger.debug(f"Opening article in browser: {url}")
+            webbrowser.open(url)
+            self.notify(message="Opening in browser", title="Browser")
+        except Exception as e:
+            logger.error(f"Error opening browser: {e}")
+            self.notify(message=f"Error opening browser: {e}", title="Error", severity="error")
 
     def action_show_metadata(self) -> None:
         """Show detailed metadata for the current article."""
@@ -471,20 +326,15 @@ class RWReader(App[None]):
             if "reading_progress" in self.current_article:
                 metadata.append(f"Reading Progress: {self.current_article['reading_progress']}%")
                 
-            category = "Later" if self.current_article.get("saved_for_later", False) else "Inbox"
-            category = "Archive" if self.current_article.get("archived", False) else category
+            # Determine category
+            category = "Archive" if self.current_article.get("archived", True) else (
+                "Later" if self.current_article.get("saved_for_later", False) else "Inbox"
+            )
             metadata.append(f"Category: {category}")
             
+            # Add summary if available
             if "summary" in self.current_article and self.current_article["summary"]:
                 metadata.append(f"\nSummary: {self.current_article['summary']}")
-                
-            # Additional metadata if available
-            for key, value in self.current_article.items():
-                if key not in ["title", "author", "site_name", "url", "published_date", 
-                            "word_count", "reading_progress", "archived", "saved_for_later",
-                            "summary", "content", "html", "text", "document"]:
-                    if isinstance(value, (str, int, float, bool)) and value:
-                        metadata.append(f"{key}: {value}")
             
             # Show metadata in a notification
             metadata_text = "\n".join(metadata)
@@ -493,105 +343,9 @@ class RWReader(App[None]):
                 message=metadata_text,
                 timeout=10,  # Longer timeout for more time to read
             )
-            
         except Exception as e:
             logger.error(f"Error showing metadata: {e}")
             self.notify(message=f"Error showing metadata: {e}", title="Error", severity="error")
-
-    def action_focus_next_pane(self) -> None:
-        """Move focus to the next pane."""
-        panes = ["collections", "articles", "content"]
-        current_focus = self.focused
-        if current_focus:
-            current_id = current_focus.id
-            if current_id in panes:
-                next_index = (panes.index(current_id) + 1) % len(panes)
-                next_pane = self.query_one(f"#{panes[next_index]}")
-                next_pane.focus()
-
-    def action_focus_previous_pane(self) -> None:
-        """Move focus to the previous pane."""
-        panes = ["collections", "articles", "content"]
-        current_focus = self.focused
-        if current_focus:
-            current_id = current_focus.id
-            if current_id in panes:
-                previous_index = (panes.index(current_id) - 1) % len(panes)
-                previous_pane = self.query_one(f"#{panes[previous_index]}")
-                previous_pane.focus()
-
-    def action_next_item(self) -> None:
-        """Move to the next item in the current list."""
-        current_focus = self.focused
-        if current_focus and hasattr(current_focus, "action_cursor_down"):
-            current_focus.action_cursor_down()
-
-    def action_previous_item(self) -> None:
-        """Move to the previous item in the current list."""
-        current_focus = self.focused
-        if current_focus and hasattr(current_focus, "action_cursor_up"):
-            current_focus.action_cursor_up()
-
-    def action_toggle_dark(self) -> None:
-        """Toggle between dark and light theme."""
-        self.theme = "textual-dark" if self.theme == "textual-light" else "textual-light"
-
-    def action_toggle_help(self) -> None:
-        """Show or hide the help screen."""
-        if hasattr(self.screen, "id") and self.screen.id == "help":
-            self.pop_screen()
-        else:
-            self.push_screen(HelpScreen())
-
-    async def action_refresh(self) -> None:
-        """Refresh all data from the API."""
-        self.client.clear_cache()
-        self.notify(message="Refreshing data...", title="Refresh")
-        # Run workers sequentially
-        await self.refresh_collections()
-        await self.refresh_articles()
-        if self.current_article_id:
-            await self.display_article(article_id=self.current_article_id)
-        self.notify(message="Refresh complete", title="Refresh")
-
-    async def action_toggle_read(self) -> None:
-        """Toggle read/unread status of the current article."""
-        if not self.current_article_id:
-            self.notify(message="No article selected", title="Error", severity="warning")
-            return
-            
-        try:
-            is_read = self.current_article and self.current_article.get("read", False)
-            if is_read:
-                self.client.mark_as_unread(article_id=self.current_article_id)
-                self.notify(message="Marked as unread", title="Article Status")
-            else:
-                self.client.mark_as_read(article_id=self.current_article_id)
-                self.notify(message="Marked as read", title="Article Status")
-                
-            # Refresh the articles list to update the UI
-            await self.refresh_articles()
-        except Exception as e:
-            logger.error(f"Error toggling read status: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
-    def action_open_in_browser(self) -> None:
-        """Open the current article in a web browser."""
-        if not self.current_article:
-            self.notify(message="No article selected", title="Error", severity="warning")
-            return
-            
-        url = self.current_article.get("url")
-        if not url:
-            self.notify(message="No URL available for this article", title="Error", severity="warning")
-            return
-            
-        try:
-            webbrowser.open(url)
-            self.notify(message="Opening in browser", title="Browser")
-        except Exception as e:
-            logger.error(f"Error opening browser: {e}")
-            self.notify(message=f"Error opening browser: {e}", title="Error", severity="error")
 
     def action_clear(self) -> None:
         """Clear the content view."""
@@ -600,104 +354,294 @@ class RWReader(App[None]):
         content_view.update_content(self.content_markdown)
         self.current_article = None
         self.current_article_id = None
+        logger.debug("Cleared content view")
 
-    async def action_debug_categories(self) -> None:
-        """Debug action to test category functionality."""
-        from ..utils.debug import inspect_readwise_categories, print_api_response
-        
-        self.notify(message="Running category debug...", title="Debug")
-        
+    async def action_refresh(self) -> None:
+        """Refresh all data from the API."""
         try:
-            # Test each category
-            categories = ["inbox", "later", "archive"]
+            logger.debug("Refreshing data")
             
-            for category in categories:
-                logger.debug(f"Testing category: {category}")
-                
-                # First, try a direct API call
-                logger.debug(f"Direct API call for {category}")
-                if category == "archive":
-                    response = self.client.session.get(f"{self.client.base_url}books/", 
-                                                    params={"archived": True})
-                elif category == "later":
-                    response = self.client.session.get(f"{self.client.base_url}books/", 
-                                                    params={"archived": False, "saved_for_later": True})
-                else:  # inbox
-                    response = self.client.session.get(f"{self.client.base_url}books/", 
-                                                    params={"archived": False, "saved_for_later": False})
-                    
-                print_api_response(response, f"API response for {category}")
-                
-                # Then try our function
-                logger.debug(f"Testing get_library_by_category for {category}")
-                results = self.client.get_library_by_category(category=category)
-                logger.debug(f"Got {len(results)} results for {category}")
-                
-                # Log a few sample articles
-                for i, article in enumerate(results[:3]):
-                    logger.debug(f"Sample article {i+1} for {category}:")
-                    logger.debug(f"  ID: {article.get('id')}")
-                    logger.debug(f"  Title: {article.get('title', 'Untitled')}")
-                    logger.debug(f"  Archived: {article.get('archived', False)}")
-                    logger.debug(f"  Saved for Later: {article.get('saved_for_later', False)}")
+            # Clear the cache
+            self.client.clear_cache()
+            self.notify(message="Refreshing data...", title="Refresh")
             
-            self.notify(message="Category debug complete. Check log file.", title="Debug")
+            # Reload the current category
+            await self.load_category(self.current_category)
+            
+            # Reload the article if one was selected
+            if self.current_article_id:
+                await self.display_article(article_id=self.current_article_id)
+                
+            self.notify(message="Refresh complete", title="Refresh")
         except Exception as e:
-            logger.error(f"Error in debug_categories: {e}")
-            self.notify(message=f"Error in debug: {e}", title="Debug Error", severity="error")
+            logger.error(f"Error refreshing data: {e}")
+            self.notify(message=f"Error refreshing data: {e}", title="Error", severity="error")
+
+    def action_focus_next_pane(self) -> None:
+        """Move focus to the next pane."""
+        panes = ["navigation", "articles", "content"]
+        current_focus = self.focused
+        
+        if current_focus:
+            current_id = current_focus.id
+            if current_id in panes:
+                next_index = (panes.index(current_id) + 1) % len(panes)
+                next_pane = self.query_one(f"#{panes[next_index]}")
+                next_pane.focus()
+                logger.debug(f"Focus moved to: {panes[next_index]}")
+
+    def action_focus_previous_pane(self) -> None:
+        """Move focus to the previous pane."""
+        panes = ["navigation", "articles", "content"]
+        current_focus = self.focused
+        
+        if current_focus:
+            current_id = current_focus.id
+            if current_id in panes:
+                previous_index = (panes.index(current_id) - 1) % len(panes)
+                previous_pane = self.query_one(f"#{panes[previous_index]}")
+                previous_pane.focus()
+                logger.debug(f"Focus moved to: {panes[previous_index]}")
+
+    def action_next_item(self) -> None:
+        """Move to the next item in the current list."""
+        current_focus = self.focused
+        
+        if current_focus and hasattr(current_focus, "action_cursor_down"):
+            # For normal listviews and other widgets with cursor_down
+            current_focus.action_cursor_down()
+        elif current_focus and current_focus.id == "navigation":
+            # For the tree widget, we need to handle it specially
+            tree = self.query_one("#navigation", Tree)
+            # The tree widget handles its own navigation with keyboard events
+            # So we can just pass this action through
+            pass
+
+    def action_previous_item(self) -> None:
+        """Move to the previous item in the current list."""
+        current_focus = self.focused
+        
+        if current_focus and hasattr(current_focus, "action_cursor_up"):
+            # For normal listviews and other widgets with cursor_up
+            current_focus.action_cursor_up()
+        elif current_focus and current_focus.id == "navigation":
+            # For the tree widget, we need to handle it specially
+            tree = self.query_one("#navigation", Tree)
+            # The tree widget handles its own navigation with keyboard events
+            # So we can just pass this action through
+            pass
+
+    def action_toggle_dark(self) -> None:
+        """Toggle between dark and light theme."""
+        self.theme = "textual-dark" if self.theme == "textual-light" else "textual-light"
+        logger.debug(f"Theme toggled to: {self.theme}")
+
+    def action_toggle_help(self) -> None:
+        """Show or hide the help screen."""
+        if hasattr(self.screen, "id") and self.screen.id == "help":
+            self.pop_screen()
+            logger.debug("Help screen closed")
+        else:
+            self.push_screen(HelpScreen())
+            logger.debug("Help screen opened")
+
+    def action_debug_dump(self) -> None:
+        """Dump debug information."""
+        try:
+            logger.debug("Dumping debug information")
+            self.notify(message="Dumping debug information to log...", title="Debug")
+            self.client.dump_debug_info()
+            self.notify(message="Debug information dumped to log", title="Debug")
+        except Exception as e:
+            logger.error(f"Error dumping debug info: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
 
     async def action_debug_reset_cache(self) -> None:
-        """Debug action to reset the cache and reload everything."""
-        self.notify(message="Resetting cache...", title="Debug")
-        
-        # Clear the client cache
-        self.client.clear_cache()
-        
-        # Clear the current selection
-        self.current_article = None
-        self.current_article_id = None
-        
-        # Reset to inbox view
-        self.current_collection_id = None
-        self.current_view = "inbox"
-        
-        # Refresh collections and articles
-        await self.refresh_collections()
-        await self.refresh_articles()
-        
-        self.notify(message="Cache reset complete.", title="Debug")
-
-    def action_debug_api(self) -> None:
-        """Debug action to test the API directly."""
-        if not hasattr(self.client, 'debug_api_call'):
-            # Add the method to the client if not already there
-            from ..utils.debug import debug_api_call
-            setattr(self.client, 'debug_api_call', debug_api_call.__get__(self.client, type(self.client)))
-        
+        """Reset cache and reload everything."""
         try:
-            # Test basic user info
-            self.notify(message="Testing API...", title="Debug")
-            self.client.debug_api_call("user")
+            logger.debug("Resetting cache")
+            self.notify(message="Resetting cache...", title="Debug")
             
-            # Test books endpoint with various parameters
-            logger.debug("Testing books endpoint with no parameters")
-            self.client.debug_api_call("books")
+            # Clear the client cache
+            self.client.clear_cache()
             
-            logger.debug("Testing books endpoint with archived=true")
-            self.client.debug_api_call("books", {"archived": True})
+            # Clear the current selection
+            self.current_article = None
+            self.current_article_id = None
             
-            logger.debug("Testing books endpoint with saved_for_later=true")
-            self.client.debug_api_call("books", {"saved_for_later": True})
+            # Reload current category
+            await self.load_category(self.current_category)
             
-            logger.debug("Testing books endpoint with both parameters")
-            self.client.debug_api_call("books", {"archived": False, "saved_for_later": False})
-            
-            self.notify(message="API tests complete. Check log file.", title="Debug")
+            self.notify(message="Cache reset complete", title="Debug")
         except Exception as e:
-            logger.error(f"Error in debug_api: {e}")
-            self.notify(message=f"Error in API debug: {e}", title="Debug Error", severity="error")
+            logger.error(f"Error resetting cache: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+
+    """Updates to app.py to work with our hybrid client."""
+
+    async def load_category(self, category: str) -> None:
+        """Load articles for the given category."""
+        try:
+            # Clear the current article
+            self.current_article = None
+            self.current_article_id = None
+            
+            # Update the articles list
+            articles_list = self.query_one("#articles", ListView)
+            await articles_list.clear()
+            
+            # Add category header
+            header_text = category.capitalize()
+            articles_list.append(ListItem(Static(f"{header_text.upper()} ARTICLES"), id="header"))
+            
+            # Notify user we're loading
+            self.notify(message=f"Loading {header_text} articles...", title="Loading")
+            
+            # Get articles for the selected category
+            articles = []
+            if category == "inbox":
+                articles = self.client.get_inbox()
+            elif category == "later":
+                articles = self.client.get_later()
+            elif category == "archive":
+                articles = self.client.get_archive()
+            
+            # Log article count
+            logger.debug(f"Loaded {len(articles)} articles for {category}")
+            
+            # Add each article to the list
+            for article in articles:
+                await self.add_article_to_list(article, articles_list)
+                
+            # Show completed notification
+            self.notify(message=f"Loaded {len(articles)} articles", title=f"{header_text}")
+            
+            # Clear the content pane
+            content_view = self.query_one("#content", ArticleViewer)
+            content_view.update_content("# Select an article to read")
+        except Exception as e:
+            logger.error(f"Error loading category {category}: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    async def action_move_to_inbox(self) -> None:
+        """Move the current article to Inbox."""
+        if not self.current_article_id:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            logger.debug(f"Moving article {self.current_article_id} to Inbox")
+            
+            if self.client.move_to_inbox(article_id=self.current_article_id):
+                # Show success message
+                self.notify(message="Moved to Inbox", title="Success")
+                
+                # Refresh if we're not already in the inbox
+                if self.current_category != "inbox":
+                    await self.load_category(self.current_category)
+                    
+                # Update the article display
+                if self.current_article_id:
+                    await self.display_article(article_id=self.current_article_id)
+            else:
+                self.notify(message="Failed to move to Inbox", title="Error", severity="error")
+        except Exception as e:
+            logger.error(f"Error moving to inbox: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    async def action_move_to_later(self) -> None:
+        """Move the current article to Later."""
+        if not self.current_article_id:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            logger.debug(f"Moving article {self.current_article_id} to Later")
+            
+            if self.client.move_to_later(article_id=self.current_article_id):
+                # Show success message
+                self.notify(message="Moved to Later", title="Success")
+                
+                # Refresh if we're not already in Later
+                if self.current_category != "later":
+                    await self.load_category(self.current_category)
+                    
+                # Update the article display
+                if self.current_article_id:
+                    await self.display_article(article_id=self.current_article_id)
+            else:
+                self.notify(message="Failed to move to Later", title="Error", severity="error")
+        except Exception as e:
+            logger.error(f"Error moving to later: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    async def action_move_to_archive(self) -> None:
+        """Move the current article to Archive."""
+        if not self.current_article_id:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            logger.debug(f"Moving article {self.current_article_id} to Archive")
+            
+            if self.client.move_to_archive(article_id=self.current_article_id):
+                # Show success message
+                self.notify(message="Moved to Archive", title="Success")
+                
+                # Refresh if we're not already in the Archive
+                if self.current_category != "archive":
+                    await self.load_category(self.current_category)
+                    
+                # Update the article display
+                if self.current_article_id:
+                    await self.display_article(article_id=self.current_article_id)
+            else:
+                self.notify(message="Failed to move to Archive", title="Error", severity="error")
+        except Exception as e:
+            logger.error(f"Error moving to archive: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+async def action_toggle_read(self) -> None:
+    """Toggle read/unread status of the current article."""
+    if not self.current_article_id or not self.current_article:
+        self.notify(message="No article selected", title="Error", severity="warning")
+        return
+        
+    try:
+        # Determine current read status
+        is_read = self.current_article.get("read", False) or self.current_article.get("state") == "finished"
+        
+        # Toggle status
+        logger.debug(f"Toggling read status for article {self.current_article_id} to {not is_read}")
+        
+        if self.client.toggle_read(article_id=self.current_article_id, read=not is_read):
+            # Show success message
+            status = "read" if not is_read else "unread"
+            self.notify(message=f"Marked as {status}", title="Success")
+            
+            # Update the article in the list without refreshing everything
+            articles_list = self.query_one("#articles", ListView)
+            for item in articles_list.children:
+                if hasattr(item, "id") and item.id == f"art_{self.current_article_id}":
+                    item.styles.text_style = "none" if not is_read else "bold"
+                    break
+            
+            # Update current article's status
+            self.current_article["read"] = not is_read
+            self.current_article["state"] = "finished" if not is_read else "reading"
+            
+            # Refresh the article display
+            await self.display_article(article_id=self.current_article_id)
+        else:
+            self.notify(message=f"Failed to toggle read status", title="Error", severity="error")
+    except Exception as e:
+        logger.error(f"Error toggling read status: {e}")
+        self.notify(message=f"Error: {e}", title="Error", severity="error")
+
 
     def on_unmount(self) -> None:
         """Clean up resources when the app is closed."""
         if hasattr(self, "client"):
+            logger.debug("Closing client")
             self.client.close()

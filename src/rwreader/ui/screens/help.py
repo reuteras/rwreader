@@ -1,4 +1,4 @@
-"""Updated help screen for rwreader."""
+"""Help screen for rwreader."""
 
 from textual.app import ComposeResult
 from textual.screen import Screen
@@ -13,7 +13,7 @@ HELP_TEXT = """# Readwise Reader TUI Help
 
 ## Article Actions
 - **r**: Toggle read/unread status
-- **a**: Toggle archive status
+- **a**: Move article to Archive
 - **l**: Move article to Later
 - **i**: Move article to Inbox
 - **o**: Open article in browser
@@ -31,16 +31,15 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - **Later**: Articles saved for reading later
 - **Archive**: Articles you've finished with
 
-## Collections and Library
-- The left pane shows your library categories and collections
-- Select a category or collection to view its contents
-- Use keyboard shortcuts to move articles between categories
-
 ## Tips
 - Articles are automatically marked as read when opened (configurable)
 - Links in articles can be clicked to open in browser
 - Use the 'm' key to view all available metadata for an article
-- Filter by collection to focus on specific content
+- When an article is displayed, you can move it to any category with a single keystroke
+
+## Debug
+- **Ctrl+R**: Reset cache and reload all data
+- **Ctrl+D**: Dump debug information to log file
 
 ## About
 Readwise Reader TUI is a terminal user interface for accessing your Readwise Reader library.

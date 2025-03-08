@@ -8,13 +8,29 @@ Header {
     content-align: center top;
 }
 
-/* Panes layout */
-#collections {
-    width: 25;
+/* Navigation tree styling */
+#navigation {
+    width: 20;
     height: 100%;
     border-right: solid #344455;
+    background: $panel;
 }
 
+#navigation .tree--label {
+    color: $text;
+}
+
+#navigation .tree--label-selected {
+    background: $accent;
+    color: $text;
+    text-style: bold;
+}
+
+#navigation .tree--guides {
+    color: $primary-lighten-2;
+}
+
+/* Article list styling */
 #articles {
     height: 30%;
     min-height: 10;
@@ -22,9 +38,11 @@ Header {
     border-bottom: solid #344455;
 }
 
+/* Content pane styling */
 #content {
     height: 1fr;
     min-height: 20;
+    padding: 0 1;
 }
 
 /* List item styling */
@@ -55,15 +73,12 @@ ListView:focus > ListItem.--highlight {
     background: $primary-darken-2;
 }
 
-/* Static elements as headers in lists */
-ListView > ListItem:first-of-type > Static {
+/* Header items in lists */
+ListView > ListItem#header {
     color: $text-muted;
     text-style: bold;
-}
-
-/* Article viewer styling */
-#content {
-    padding: 0 1;
+    background: $surface;
+    margin-bottom: 1;
 }
 
 /* Help screen styling */
