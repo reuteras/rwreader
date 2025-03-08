@@ -1,4 +1,4 @@
-"""Help screen for rwreader."""
+"""Updated help screen for rwreader."""
 
 from textual.app import ComposeResult
 from textual.screen import Screen
@@ -14,7 +14,10 @@ HELP_TEXT = """# Readwise Reader TUI Help
 ## Article Actions
 - **r**: Toggle read/unread status
 - **a**: Toggle archive status
+- **l**: Move article to Later
+- **i**: Move article to Inbox
 - **o**: Open article in browser
+- **m**: Show detailed article metadata
 
 ## App Controls
 - **h / ?**: Show/hide this help
@@ -23,15 +26,20 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - **G / ,**: Refresh data
 - **q**: Quit
 
+## Library Categories
+- **Inbox**: Default location for new articles
+- **Later**: Articles saved for reading later
+- **Archive**: Articles you've finished with
+
 ## Collections and Library
-- The left pane shows your library and collections
-- Select "All Items" to view your unarchived articles
-- Select "Archive" to view archived articles
-- Select a collection to view its contents
+- The left pane shows your library categories and collections
+- Select a category or collection to view its contents
+- Use keyboard shortcuts to move articles between categories
 
 ## Tips
 - Articles are automatically marked as read when opened (configurable)
 - Links in articles can be clicked to open in browser
+- Use the 'm' key to view all available metadata for an article
 - Filter by collection to focus on specific content
 
 ## About

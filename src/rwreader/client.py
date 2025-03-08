@@ -83,7 +83,122 @@ class ReadwiseClient:
         except httpx.HTTPError as e:
             logger.error(f"Error fetching library: {e}")
             return []
-    
+
+    """Fixed methods for fetching articles by category in ReadwiseClient."""
+
+    def get_library_by_category(self, category: str = "inbox", 
+                            page: int = 1, page_size: int = 50) -> List[Dict[str, Any]]:
+        """Get library items filtered by category.
+        
+        Args:
+            category: Filter by category (inbox, later, archive)
+            page: Page number for pagination
+            page_size: Number of items per page
+            
+        Returns:
+            List of library items
+        """
+        cache_key = f"library_category_{category}_{page}_{page_size}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        # Base params
+        params = {
+            "page": page,
+            "page_size": page_size,
+        }
+        
+        # Configure parameters for each category
+        if category.lower() == "archive":
+            # For archive, simply use archived=true
+            params["archived"] = "true"
+        elif category.lower() == "later":
+            # For later, we want unarchived items that are saved for later
+            params["archived"] = "false"
+            params["saved_for_later"] = "true"
+        elif category.lower() == "inbox":
+            # For inbox, we want unarchived items that are NOT saved for later
+            params["archived"] = "false"
+            params["saved_for_later"] = "false"
+        
+        try:
+            full_url = f"{self.base_url}books/"
+            logger.debug(f"Fetching library category '{category}' from: {full_url} with params: {params}")
+            
+            response = self.session.get(full_url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Handle different response formats
+            if "results" in data:
+                results = data.get("results", [])
+            elif isinstance(data, list):
+                results = data
+            else:
+                results = []
+                
+            logger.debug(f"Retrieved {len(results)} articles for category '{category}'")
+            
+            # Store in cache
+            self.cache[cache_key] = results
+            return results
+        except httpx.HTTPError as e:
+            logger.error(f"Error fetching library category: {e}")
+            return []
+        
+    def move_to_category(self, article_id: str, category: str) -> bool:
+        """Move article to a different category.
+        
+        Args:
+            article_id: ID of the article to update
+            category: Target category (inbox, later, archive)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        data = {}
+        
+        # Set parameters based on target category
+        if category.lower() == "archive":
+            data["archived"] = True
+        elif category.lower() == "later":
+            data["saved_for_later"] = True
+            data["archived"] = False
+        elif category.lower() == "inbox":
+            data["saved_for_later"] = False
+            data["archived"] = False
+        else:
+            logger.error(f"Invalid category: {category}")
+            return False
+            
+        try:
+            full_url = f"{self.base_url}books/{article_id}/"
+            logger.debug(f"Moving article to {category} at: {full_url} with data: {data}")
+            
+            response = self.session.patch(full_url, json=data)
+            response.raise_for_status()
+            
+            # Update cache if we have this article cached
+            cache_key = f"article_{article_id}"
+            if cache_key in self.cache:
+                article = self.cache[cache_key]
+                
+                if "archived" in data:
+                    article["archived"] = data["archived"]
+                    
+                if "saved_for_later" in data:
+                    article["saved_for_later"] = data["saved_for_later"]
+                    
+                self.cache[cache_key] = article
+                
+            # Invalidate library cache as it might have changed
+            self._invalidate_library_cache()
+                
+            return True
+        except httpx.HTTPError as e:
+            logger.error(f"Error moving article {article_id} to {category}: {e}")
+            return False
+
     def get_article(self, article_id: str) -> Optional[Dict[str, Any]]:
         """Get full article content.
         

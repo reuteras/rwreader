@@ -3,13 +3,12 @@
 import logging
 import sys
 import webbrowser
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, Optional
 
-from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Label, ListItem, ListView, Static
+from textual.widgets import Footer, Header, ListItem, ListView, Static
 
 from ..client import ReadwiseClient
 from ..config import Configuration
@@ -32,7 +31,10 @@ class RWReader(App[None]):
         # Article actions
         ("r", "toggle_read", "Toggle read/unread"),
         ("a", "toggle_archive", "Toggle archive"),
+        ("l", "move_to_later", "Move to Later"),
+        ("i", "move_to_inbox", "Move to Inbox"),
         ("o", "open_in_browser", "Open in browser"),
+        ("m", "show_metadata", "Show metadata"),
         
         # App controls
         ("?", "toggle_help", "Help"),
@@ -42,8 +44,10 @@ class RWReader(App[None]):
         ("G", "refresh", "Refresh"),
         ("comma", "refresh", "Refresh"),
         ("q", "quit", "Quit"),
+        ("ctrl+d", "debug_categories", ""),  # Debug categories
+        ("ctrl+a", "debug_article", ""),     # Debug current article
+        ("ctrl+r", "debug_reset_cache", ""), # Reset cache
     ]
-
     CSS_PATH = ["styles.tcss"]
 
     def __init__(self) -> None:
@@ -94,37 +98,6 @@ class RWReader(App[None]):
         await self.refresh_collections()
         await self.refresh_articles()
 
-    async def on_list_view_highlighted(self, message: Any) -> None:
-        """Handle list view item highlighting."""
-        highlighted_item = message.item
-        if highlighted_item is None:
-            return
-
-        try:
-            # Handle collection/category selection
-            if hasattr(highlighted_item, "id") and highlighted_item.id is not None:
-                if highlighted_item.id.startswith("col_"):
-                    collection_id = highlighted_item.id.replace("col_", "")
-                    self.current_collection_id = collection_id
-                    self.current_view = "collection"
-                    await self.refresh_articles()
-                elif highlighted_item.id == "lib_library":
-                    self.current_collection_id = None
-                    self.current_view = "library"
-                    await self.refresh_articles()
-                elif highlighted_item.id == "lib_archive":
-                    self.current_collection_id = None
-                    self.current_view = "archive"
-                    await self.refresh_articles()
-                # Handle article selection
-                elif highlighted_item.id.startswith("art_"):
-                    article_id = highlighted_item.id.replace("art_", "")
-                    self.current_article_id = article_id
-                    await self.display_article(article_id=article_id)
-        except Exception as e:
-            logger.error(f"Error handling list view highlight: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
     async def refresh_collections(self) -> None:
         """Load collections from Readwise."""
         try:
@@ -134,7 +107,8 @@ class RWReader(App[None]):
             
             # Add library sections
             list_view.append(ListItem(Static("LIBRARY"), id="lib_header"))
-            list_view.append(ListItem(Static("All Items"), id="lib_library"))
+            list_view.append(ListItem(Static("Inbox"), id="lib_inbox"))
+            list_view.append(ListItem(Static("Later"), id="lib_later"))
             list_view.append(ListItem(Static("Archive"), id="lib_archive"))
             
             # Add collections
@@ -168,15 +142,42 @@ class RWReader(App[None]):
             list_view: ListView = self.query_one("#articles", ListView)
             await list_view.clear()
             
+            # Display the current view in the header of the articles panel
+            header_text = "Articles"
+            if self.current_view == "inbox":
+                header_text = "Inbox"
+            elif self.current_view == "later":
+                header_text = "Later"
+            elif self.current_view == "archive":
+                header_text = "Archive"
+            elif self.current_view == "collection" and self.current_collection_id:
+                # Try to find collection name
+                for collection in self.client.get_collections():
+                    if str(collection.get("id")) == str(self.current_collection_id):
+                        header_text = f"Collection: {collection.get('name', 'Unknown')}"
+                        break
+            
+            # Add a header item
+            list_view.append(ListItem(Static(header_text.upper()), id="art_header"))
+            
             articles = []
             
             # Load articles based on current view
-            if self.current_view == "library":
-                articles = self.client.get_library(location="new")
+            if self.current_view == "inbox":
+                self.notify(message="Loading Inbox articles...", title="Loading")
+                articles = self.client.get_library_by_category(category="inbox")
+            elif self.current_view == "later":
+                self.notify(message="Loading Later articles...", title="Loading")
+                articles = self.client.get_library_by_category(category="later")
             elif self.current_view == "archive":
-                articles = self.client.get_library(location="archive")
+                self.notify(message="Loading Archive articles...", title="Loading")
+                articles = self.client.get_library_by_category(category="archive")
             elif self.current_view == "collection" and self.current_collection_id:
+                self.notify(message="Loading collection articles...", title="Loading")
                 articles = self.client.get_collection_items(collection_id=self.current_collection_id)
+            
+            self.notify(message=f"Loaded {len(articles)} articles", title="Loading Complete")
+            logger.debug(f"Loaded {len(articles)} articles for view '{self.current_view}'")
             
             # Add articles to the list view
             for article in articles:
@@ -184,7 +185,8 @@ class RWReader(App[None]):
                 title = article.get("title", "Untitled")
                 site_name = article.get("site_name", "")
                 reading_progress = article.get("reading_progress", 0)
-                is_read = article.get("read", False)
+                is_read = article.get("read", False) or article.get("state") == "finished"
+                saved_for_later = article.get("saved_for_later", False)
                 
                 # Format the title with metadata
                 display_title = title
@@ -195,6 +197,9 @@ class RWReader(App[None]):
                     display_title += f" - {reading_progress}%"
                 elif is_read:
                     display_title += " - Read"
+                    
+                if saved_for_later and self.current_view != "later":
+                    display_title += " - Later"
                 
                 # Create and append list item
                 list_item = ListItem(Static(display_title), id=f"art_{article_id}")
@@ -209,95 +214,180 @@ class RWReader(App[None]):
             logger.error(f"Error refreshing articles: {e}")
             self.notify(message=f"Error refreshing articles: {e}", title="Error", severity="error")
 
-    async def display_article(self, article_id: str) -> None:
-        """Fetch and display article content."""
+    async def on_list_view_highlighted(self, message: Any) -> None:
+        """Handle list view item highlighting."""
+        highlighted_item = message.item
+        if highlighted_item is None:
+            return
+
         try:
-            # Fetch the article
-            article = self.client.get_article(article_id=article_id)
-            if not article:
-                self.notify(message=f"Article not found: {article_id}", title="Error", severity="error")
-                return
-                
-            self.current_article = article
-            self.current_article_id = article_id
-            
-            # Get content from article
-            title = article.get("title", "Untitled")
-            
-            # Try different possible content fields
-            content = ""
-            for content_field in ["content", "html", "text", "document"]:
-                if content_field in article and article[content_field]:
-                    content = article[content_field]
-                    break
-                    
-            url = article.get("url", article.get("source_url", ""))
-            author = article.get("author", article.get("creator", ""))
-            site_name = article.get("site_name", article.get("domain", ""))
-            
-            # Display raw HTML if content seems to be HTML
-            if content and content.strip().startswith(("<html", "<!DOCTYPE", "<div", "<p")):
-                # Log the first 200 chars for debugging
-                logger.debug(f"HTML content detected: {content[:200]}...")
-                
-            # Format the markdown content
-            header = f"# {title}\n\n"
-            if author:
-                header += f"*By {author}*\n\n"
-            if site_name:
-                header += f"*From {site_name}*\n\n"
-            if url:
-                header += f"*[Original Article]({url})*\n\n"
-                
-            header += "---\n\n"
-            
-            # Add placeholder if no content
-            if not content:
-                content = "*No content available. Try opening the article in browser.*"
-                
-            self.content_markdown = header + content
-            
-            # Display the content using our markdown view
-            content_view = self.query_one("#content", ArticleViewer)
-            content_view.update_content(self.content_markdown)
-            
-            # Log content details for debugging
-            logger.debug(f"Article ID: {article_id}")
-            logger.debug(f"Article keys: {list(article.keys())}")
-            logger.debug(f"Content length: {len(content) if content else 0} characters")
-            
-            if not content:
-                # Log all keys to help understand the API response
-                logger.debug(f"Full article data: {article}")
-                
-                # Notify the user
-                self.notify(
-                    message="No content found in this article. Try opening in browser.",
-                    title="Article Content",
-                    severity="warning"
-                )
-            
-            # Auto-mark as read if enabled
-            if self.configuration.auto_mark_read and not article.get("read", False) and not article.get("state") == "finished":
-                self.client.mark_as_read(article_id=article_id)
-                
-                # Instead of refreshing the entire list, just update the current item's style
-                if self.current_article_id:
-                    try:
-                        # Find the list item by ID and update its style
-                        article_list_view: ListView = self.query_one("#articles", ListView)
-                        for index, item in enumerate(article_list_view.children):
-                            if hasattr(item, "id") and item.id == f"art_{self.current_article_id}":
-                                item.styles.text_style = "none"
-                                break
-                    except Exception as e:
-                        logger.debug(f"Error updating item style: {e}")
-                        # Fall back to full refresh only if necessary
-                        await self.refresh_articles()
-                
+            # Handle collection/category selection
+            if hasattr(highlighted_item, "id") and highlighted_item.id is not None:
+                if highlighted_item.id.startswith("col_"):
+                    collection_id = highlighted_item.id.replace("col_", "")
+                    self.current_collection_id = collection_id
+                    self.current_view = "collection"
+                    self.notify(message=f"Loading collection...", title="Collection")
+                    await self.refresh_articles()
+                elif highlighted_item.id == "lib_inbox":
+                    self.current_collection_id = None
+                    self.current_view = "inbox"
+                    self.notify(message=f"Loading Inbox...", title="Inbox")
+                    await self.refresh_articles()
+                elif highlighted_item.id == "lib_later":
+                    self.current_collection_id = None
+                    self.current_view = "later"
+                    self.notify(message=f"Loading Later...", title="Later")
+                    await self.refresh_articles()
+                elif highlighted_item.id == "lib_archive":
+                    self.current_collection_id = None
+                    self.current_view = "archive"
+                    self.notify(message=f"Loading Archive...", title="Archive")
+                    await self.refresh_articles()
+                # Handle article selection
+                elif highlighted_item.id.startswith("art_") and highlighted_item.id != "art_header":
+                    article_id = highlighted_item.id.replace("art_", "")
+                    self.current_article_id = article_id
+                    await self.display_article(article_id=article_id)
         except Exception as e:
-            logger.error(f"Error displaying article: {e}")
-            self.notify(message=f"Error displaying article: {e}", title="Error", severity="error")
+            logger.error(f"Error handling list view highlight: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    def action_debug_article(self) -> None:
+        """Debug action to dump current article data to log file."""
+        if not self.current_article:
+            self.notify(message="No article selected", title="Debug")
+            return
+        
+        try:
+            # Log the full article data
+            logger.debug(f"Full article data: {self.current_article}")
+            
+            # Notify the user
+            self.notify(message="Article data logged to debug file", title="Debug")
+        except Exception as e:
+            logger.error(f"Error in debug action: {e}")
+            
+    async def action_move_to_inbox(self) -> None:
+        """Move the current article to Inbox."""
+        if not self.current_article_id:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            if self.client.move_to_category(article_id=self.current_article_id, category="inbox"):
+                self.notify(message="Moved to Inbox", title="Article Status")
+                await self.refresh_articles()
+                
+                # Refresh the article view to update metadata
+                if self.current_article_id:
+                    await self.display_article(article_id=self.current_article_id)
+            else:
+                self.notify(message="Failed to move to Inbox", title="Error", severity="error")
+        except Exception as e:
+            logger.error(f"Error moving article to Inbox: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    async def action_move_to_later(self) -> None:
+        """Move the current article to Later."""
+        if not self.current_article_id:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            if self.client.move_to_category(article_id=self.current_article_id, category="later"):
+                self.notify(message="Moved to Later", title="Article Status")
+                await self.refresh_articles()
+                
+                # Refresh the article view to update metadata
+                if self.current_article_id:
+                    await self.display_article(article_id=self.current_article_id)
+            else:
+                self.notify(message="Failed to move to Later", title="Error", severity="error")
+        except Exception as e:
+            logger.error(f"Error moving article to Later: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    async def action_toggle_archive(self) -> None:
+        """Toggle archive status of the current article."""
+        if not self.current_article_id:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            is_archived = self.current_article and self.current_article.get("archived", False)
+            if is_archived:
+                self.client.unarchive_article(article_id=self.current_article_id)
+                self.notify(message="Unarchived article", title="Article Status")
+            else:
+                self.client.archive_article(article_id=self.current_article_id)
+                self.notify(message="Archived article", title="Article Status")
+                
+            # Refresh the articles list to update the UI
+            await self.refresh_articles()
+            
+            # Refresh the article view to update metadata
+            if self.current_article_id:
+                await self.display_article(article_id=self.current_article_id)
+        except Exception as e:
+            logger.error(f"Error toggling archive status: {e}")
+            self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+    def action_show_metadata(self) -> None:
+        """Show detailed metadata for the current article."""
+        if not self.current_article:
+            self.notify(message="No article selected", title="Error", severity="warning")
+            return
+            
+        try:
+            # Extract all relevant metadata
+            metadata = []
+            metadata.append(f"Title: {self.current_article.get('title', 'Untitled')}")
+            
+            if "author" in self.current_article:
+                metadata.append(f"Author: {self.current_article['author']}")
+                
+            if "site_name" in self.current_article:
+                metadata.append(f"Source: {self.current_article['site_name']}")
+                
+            if "url" in self.current_article:
+                metadata.append(f"URL: {self.current_article['url']}")
+                
+            if "published_date" in self.current_article:
+                metadata.append(f"Published: {self.current_article['published_date']}")
+                
+            if "word_count" in self.current_article:
+                metadata.append(f"Word Count: {self.current_article['word_count']}")
+                
+            if "reading_progress" in self.current_article:
+                metadata.append(f"Reading Progress: {self.current_article['reading_progress']}%")
+                
+            category = "Later" if self.current_article.get("saved_for_later", False) else "Inbox"
+            category = "Archive" if self.current_article.get("archived", False) else category
+            metadata.append(f"Category: {category}")
+            
+            if "summary" in self.current_article and self.current_article["summary"]:
+                metadata.append(f"\nSummary: {self.current_article['summary']}")
+                
+            # Additional metadata if available
+            for key, value in self.current_article.items():
+                if key not in ["title", "author", "site_name", "url", "published_date", 
+                            "word_count", "reading_progress", "archived", "saved_for_later",
+                            "summary", "content", "html", "text", "document"]:
+                    if isinstance(value, (str, int, float, bool)) and value:
+                        metadata.append(f"{key}: {value}")
+            
+            # Show metadata in a notification
+            metadata_text = "\n".join(metadata)
+            self.notify(
+                title="Article Metadata",
+                message=metadata_text,
+                timeout=10,  # Longer timeout for more time to read
+            )
+            
+        except Exception as e:
+            logger.error(f"Error showing metadata: {e}")
+            self.notify(message=f"Error showing metadata: {e}", title="Error", severity="error")
 
     def action_focus_next_pane(self) -> None:
         """Move focus to the next pane."""
@@ -374,27 +464,6 @@ class RWReader(App[None]):
             await self.refresh_articles()
         except Exception as e:
             logger.error(f"Error toggling read status: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
-    def action_toggle_archive(self) -> None:
-        """Toggle archive status of the current article."""
-        if not self.current_article_id:
-            self.notify(message="No article selected", title="Error", severity="warning")
-            return
-            
-        try:
-            is_archived = self.current_article and self.current_article.get("archived", False)
-            if is_archived:
-                self.client.unarchive_article(article_id=self.current_article_id)
-                self.notify(message="Unarchived article", title="Article Status")
-            else:
-                self.client.archive_article(article_id=self.current_article_id)
-                self.notify(message="Archived article", title="Article Status")
-                
-            # Refresh the articles list to update the UI
-            self.run_worker(self.refresh_articles())
-        except Exception as e:
-            logger.error(f"Error toggling archive status: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
 
     def action_open_in_browser(self) -> None:
