@@ -38,13 +38,16 @@ class APIStatusWidget(Static):
     }
     """
 
+    # Update the initialization to disable markup
     def __init__(self, name: str = "") -> None:
         """Initialize the widget."""
-        super().__init__(name=name)
+        # Initialize with empty string and markup disabled
+        super().__init__("", name=name, markup=False)
         self.retry_time = None
         self.status: str = "hidden"
         self._update_timer = self.set_interval(1, self._update_countdown)
 
+    # Update all methods that call update() to escape square brackets if needed
     def show_rate_limit(self, retry_after: int, message: str | None = None) -> None:
         """Show rate limit information.
 
@@ -58,6 +61,16 @@ class APIStatusWidget(Static):
         self.update(message)
         self.add_class("warning")
         self.status = "warning"
+
+    def _update_countdown(self) -> None:
+        """Update the countdown timer if showing a rate limit warning."""
+        if self.retry_time is not None:
+            remaining = max(0, self.retry_time - time.time())
+            if remaining <= 0:
+                self.hide()
+            else:
+                message = f"API rate limit reached. Please wait {int(remaining)} seconds before continuing."
+                self.update(message)
 
     def show_error(self, message: str) -> None:
         """Show an error message.
@@ -92,13 +105,3 @@ class APIStatusWidget(Static):
         self.remove_class("error")
         self.remove_class("info")
         self.status = "hidden"
-
-    def _update_countdown(self) -> None:
-        """Update the countdown timer if showing a rate limit warning."""
-        if self.retry_time is not None:
-            remaining = max(0, self.retry_time - time.time())
-            if remaining <= 0:
-                self.hide()
-            else:
-                message = f"API rate limit reached. Please wait {int(remaining)} seconds before continuing."
-                self.update(message)

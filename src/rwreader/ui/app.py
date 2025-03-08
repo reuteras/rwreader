@@ -108,17 +108,21 @@ class RWReader(App[None]):
             selector="#navigation", expect_type=ListView
         )
 
-        # Add header
-        nav_list.append(item=ListItem(Static(content="LIBRARY"), id="nav_header"))
+        # Add header - disable markup
+        nav_list.append(
+            item=ListItem(Static(content="LIBRARY", markup=False), id="nav_header")
+        )
 
-        # Add category items with data attributes
-        inbox_item = ListItem(Static(content="Inbox"), id="nav_inbox")
+        # Add category items with data attributes - disable markup
+        inbox_item = ListItem(Static(content="Inbox", markup=False), id="nav_inbox")
         inbox_item.data = {"category": "inbox"}
 
-        later_item = ListItem(Static(content="Later"), id="nav_later")
+        later_item = ListItem(Static(content="Later", markup=False), id="nav_later")
         later_item.data = {"category": "later"}
 
-        archive_item = ListItem(Static(content="Archive"), id="nav_archive")
+        archive_item = ListItem(
+            Static(content="Archive", markup=False), id="nav_archive"
+        )
         archive_item.data = {"category": "archive"}
 
         # Add items to the list
@@ -154,8 +158,10 @@ class RWReader(App[None]):
             # Get display title safely
             display_title: str = safe_get_article_display_title(article=article)
 
-            # Create the list item
-            list_item = ListItem(Static(content=display_title), id=f"art_{article_id}")
+            # Create the list item - IMPORTANT: disable markup to prevent MarkupError
+            list_item = ListItem(
+                Static(content=display_title, markup=False), id=f"art_{article_id}"
+            )
 
             # Safely style based on read status
             is_read = article.get("read", False) or article.get("state") == "finished"
@@ -167,7 +173,9 @@ class RWReader(App[None]):
             logger.error(msg=f"Error adding article to list: {e}")
             # Try to add a placeholder item as fallback
             try:
-                list_view.append(item=ListItem(Static(content="Error loading article")))
+                list_view.append(
+                    item=ListItem(Static(content="Error loading article", markup=False))
+                )
             except Exception as nested_e:
                 logger.error(msg=f"Failed to add fallback item: {nested_e}")
 
@@ -479,10 +487,12 @@ class RWReader(App[None]):
             articles_list = self.query_one("#articles", ListView)
             await articles_list.clear()
 
-            # Add category header
+            # Add category header - IMPORTANT: disable markup
             header_text = category.capitalize()
             articles_list.append(
-                ListItem(Static(f"{header_text.upper()} ARTICLES"), id="header")
+                ListItem(
+                    Static(f"{header_text.upper()} ARTICLES", markup=False), id="header"
+                )
             )
 
             # Notify user we're loading
@@ -512,6 +522,17 @@ class RWReader(App[None]):
         except Exception as e:
             logger.error(f"Error loading category {category}: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
+
+            # Add an error message to the list - disable markup
+            try:
+                articles_list.append(
+                    ListItem(
+                        Static(f"Error loading {category}: {e}", markup=False),
+                        id="error",
+                    )
+                )
+            except Exception as nested_e:
+                logger.error(f"Failed to add error message to list: {nested_e}")
 
     async def action_move_to_inbox(self) -> None:
         """Move the current article to Inbox."""
