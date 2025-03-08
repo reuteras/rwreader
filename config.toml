@@ -1,0 +1,16 @@
+[general]
+# Size of the cache for storing article metadata
+cache_size = 10000
+# Default theme (dark or light)
+default_theme = "dark"
+# Whether to automatically mark articles as read when opened
+auto_mark_read = true
+
+[readwise]
+# Readwise API token - can use op command for 1Password integration
+token = "op read op://Private/Readwise/API/TOKEN --no-newline"  # Or use 1Password CLI integration
+
+[display]
+# Display settings
+font_size = "medium"  # small, medium, large
+reading_width = 80    # characters

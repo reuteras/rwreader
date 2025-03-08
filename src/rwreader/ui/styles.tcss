@@ -1,0 +1,73 @@
+/* styles.tcss - Styling for rwreader */
+
+/* Header styling */
+Header {
+    background: #344455;
+    color: white;
+    height: 1;
+    content-align: center top;
+}
+
+/* Panes layout */
+#collections {
+    width: 25;
+    height: 100%;
+    border-right: solid #344455;
+}
+
+#articles {
+    height: 30%;
+    min-height: 10;
+    max-height: 40%;
+    border-bottom: solid #344455;
+}
+
+#content {
+    height: 1fr;
+    min-height: 20;
+}
+
+/* List item styling */
+ListView {
+    border: none;
+    padding: 0 1;
+}
+
+ListView:focus {
+    border: none;
+    border-left: thick $accent;
+    padding: 0 0 0 1;
+}
+
+ListView > ListItem {
+    padding: 0 1;
+}
+
+ListView > ListItem:hover {
+    background: $boost;
+}
+
+ListView > ListItem.--highlight {
+    background: $surface;
+}
+
+ListView:focus > ListItem.--highlight {
+    background: $primary-darken-2;
+}
+
+/* Static elements as headers in lists */
+ListView > ListItem:first-of-type > Static {
+    color: $text-muted;
+    text-style: bold;
+}
+
+/* Article viewer styling */
+#content {
+    padding: 0 1;
+}
+
+/* Help screen styling */
+#help-content {
+    width: 100%;
+    height: 100%;
+}
