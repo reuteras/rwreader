@@ -31,9 +31,10 @@ class LoadMoreWidget(Static):
     def update_load_more(self) -> None:
         """Update the load more button content."""
         ListItem(
-            Static("Load More... (press SPACE)", markup=False), id="load_more_item"
+            Static(content="Load More... (press SPACE)", markup=False),
+            id="load_more_item",
         )
-        self.update("Load More... (press SPACE)")
+        self.update(content="Load More... (press SPACE)")
 
     def on_click(self) -> None:
         """Handle click events."""

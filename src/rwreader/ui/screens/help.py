@@ -11,6 +11,11 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - **Arrow keys**: Navigate in the current pane
 - **tab / shift+tab**: Navigate between panes
 
+## Direct Navigation Shortcuts
+- **I**: Go directly to Inbox
+- **L**: Go directly to Later
+- **A**: Go directly to Archive
+
 ## Article Actions
 - **r**: Toggle read/unread status
 - **a**: Move article to Archive
@@ -18,6 +23,13 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - **i**: Move article to Inbox
 - **o**: Open article in browser
 - **m**: Show detailed article metadata
+- **D**: Delete article
+
+## Link Actions
+- **ctrl+o**: Open links from article
+- **ctrl+s**: Save link to downloads
+- **ctrl+l**: Add link to Readwise
+- **ctrl+shift+l**: Add link to Readwise and open
 
 ## App Controls
 - **h / ?**: Show/hide this help

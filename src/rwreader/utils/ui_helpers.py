@@ -3,10 +3,16 @@
 import logging
 from typing import Any
 
+from ..utils.markdown_converter import (
+    escape_markdown_formatting,
+    format_timestamp,
+    render_html_to_markdown,
+)
+
 logger: logging.Logger = logging.getLogger(name=__name__)
 
 
-def safe_set_text_style(item: Any, style: str | None) -> None:
+def safe_set_text_style(item: Any, style: str) -> None:
     """Safely set text style for a UI item with validation.
 
     Args:
@@ -14,7 +20,7 @@ def safe_set_text_style(item: Any, style: str | None) -> None:
         style: Style to apply (e.g., "bold", "none", "italic")
     """
     # Validate the style before applying
-    valid_styles = ["bold", "none", "italic", "underline", "strike", "reverse"]
+    valid_styles: list[str] = ["bold", "none", "italic", "underline", "strike", "reverse"]
 
     # If style is None or empty, use "none" as default
     if not style:
@@ -35,7 +41,7 @@ def safe_set_text_style(item: Any, style: str | None) -> None:
             logger.error(f"Error setting fallback text style: {e}")
 
 
-def format_article_content(article: dict[str, Any]) -> str:
+def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     """Format article data into markdown content with error checking.
 
     Args:
@@ -50,17 +56,26 @@ def format_article_content(article: dict[str, Any]) -> str:
         content = ""
 
         # Try different possible content fields
-        for content_field in ["content", "html", "text", "document"]:
+        html_content = None
+        for content_field in ["html_content", "content", "html", "text", "document"]:
             if article.get(content_field):
+                if content_field == "html_content":
+                    html_content = article[content_field]
+                    break
                 content = article[content_field]
                 break
+
+        # Use html_content if available, otherwise use content
+        raw_content = html_content if html_content else content
 
         # Get metadata with safe defaults
         url = article.get("url", article.get("source_url", ""))
         author = article.get("author", article.get("creator", ""))
         site_name = article.get("site_name", article.get("domain", ""))
         summary = article.get("summary", "")
-        published_date = article.get("published_date", "")
+        published_date = format_timestamp(article.get("published_date", ""))
+        created_at = format_timestamp(article.get("created_at", ""))
+        updated_at = format_timestamp(article.get("updated_at", ""))
         word_count = article.get("word_count", 0)
 
         # Determine category
@@ -71,17 +86,21 @@ def format_article_content(article: dict[str, Any]) -> str:
         )
 
         # Format markdown content
-        header = f"# {title}\n\n"
+        header = f"# {escape_markdown_formatting(title)}\n\n"
 
         # Add metadata
         metadata = []
         if author:
-            metadata.append(f"*By {author}*")
+            metadata.append(f"*By {escape_markdown_formatting(author)}*")
         if site_name:
-            metadata.append(f"*From {site_name}*")
+            metadata.append(f"*From {escape_markdown_formatting(site_name)}*")
         if published_date:
             metadata.append(f"*Published: {published_date}*")
-        if word_count and isinstance(word_count, int | float):
+        if created_at:
+            metadata.append(f"*Added: {created_at}*")
+        if updated_at and updated_at != created_at:
+            metadata.append(f"*Updated: {updated_at}*")
+        if word_count and isinstance(word_count, (int | float)):
             metadata.append(f"*{word_count} words*")
         metadata.append(f"*Category: {category}*")
 
@@ -92,15 +111,21 @@ def format_article_content(article: dict[str, Any]) -> str:
             header += f"*[Original Article]({url})*\n\n"
 
         if summary:
-            header += f"**Summary**: {summary}\n\n"
+            header += f"**Summary**: {escape_markdown_formatting(summary)}\n\n"
 
         header += "---\n\n"
 
-        # Add placeholder if no content
-        if not content:
-            content = "*No content available. Try opening the article in browser.*"
+        # Convert HTML to markdown if content is in HTML format
+        if raw_content:
+            # Check if content looks like HTML
+            if isinstance(raw_content, str) and ("<html" in raw_content.lower() or "<body" in raw_content.lower() or "<div" in raw_content.lower()):
+                content_markdown = render_html_to_markdown(raw_content)
+            else:
+                content_markdown = raw_content
+        else:
+            content_markdown = "*No content available. Try opening the article in browser.*"
 
-        return header + content
+        return header + content_markdown
 
     except Exception as e:
         logger.error(f"Error formatting article content: {e}")
@@ -131,7 +156,7 @@ def safe_get_article_display_title(article: dict[str, Any]) -> str:
         # Add reading progress or read status
         if (
             reading_progress
-            and isinstance(reading_progress, int | float)
+            and isinstance(reading_progress, (int | float))
             and 0 < reading_progress < 100  # noqa: PLR2004
         ):
             display_title += f" - {reading_progress}%"
