@@ -331,7 +331,7 @@ class ReadwiseClient:
             if document:
                 # Create base article dict from the document
                 article = self._convert_document_to_dict(document)
-                
+
                 try:
                     # Make a direct API call with withHtmlContent
                     params = {"id": article_id, "withHtmlContent": "true"}

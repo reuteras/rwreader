@@ -2,6 +2,7 @@
 
 import time
 
+from textual.timer import Timer
 from textual.widgets import Static
 
 
@@ -42,10 +43,12 @@ class APIStatusWidget(Static):
     def __init__(self, name: str = "") -> None:
         """Initialize the widget."""
         # Initialize with empty string and markup disabled
-        super().__init__("", name=name, markup=False)
-        self.retry_time = None
+        super().__init__(content="", name=name, markup=False)
+        self.retry_time = 0.0
         self.status: str = "hidden"
-        self._update_timer = self.set_interval(1, self._update_countdown)
+        self._update_timer: Timer = self.set_interval(
+            interval=1, callback=self._update_countdown
+        )
 
     # Update all methods that call update() to escape square brackets if needed
     def show_rate_limit(self, retry_after: int, message: str | None = None) -> None:
@@ -55,22 +58,22 @@ class APIStatusWidget(Static):
             retry_after: Seconds until retry is allowed
             message: Optional custom message
         """
-        self.retry_time = time.time() + retry_after
+        self.retry_time: float = time.time() + retry_after
         if message is None:
             message = f"API rate limit reached. Please wait {retry_after} seconds before continuing."
-        self.update(message)
+        self.update(content=message)
         self.add_class("warning")
         self.status = "warning"
 
     def _update_countdown(self) -> None:
         """Update the countdown timer if showing a rate limit warning."""
         if self.retry_time is not None:
-            remaining = max(0, self.retry_time - time.time())
+            remaining: float = max(0, self.retry_time - time.time())
             if remaining <= 0:
                 self.hide()
             else:
-                message = f"API rate limit reached. Please wait {int(remaining)} seconds before continuing."
-                self.update(message)
+                message: str = f"API rate limit reached. Please wait {int(remaining)} seconds before continuing."
+                self.update(content=message)
 
     def show_error(self, message: str) -> None:
         """Show an error message.
@@ -78,8 +81,8 @@ class APIStatusWidget(Static):
         Args:
             message: Error message to display
         """
-        self.retry_time = None
-        self.update(message)
+        self.retry_time = 0.0
+        self.update(content=message)
         self.add_class("error")
         self.remove_class("warning")
         self.remove_class("info")
@@ -91,8 +94,8 @@ class APIStatusWidget(Static):
         Args:
             message: Information to display
         """
-        self.retry_time = None
-        self.update(message)
+        self.retry_time = 0.0
+        self.update(content=message)
         self.add_class("info")
         self.remove_class("warning")
         self.remove_class("error")
@@ -100,7 +103,7 @@ class APIStatusWidget(Static):
 
     def hide(self) -> None:
         """Hide the status widget."""
-        self.retry_time = None
+        self.retry_time = 0.0
         self.remove_class("warning")
         self.remove_class("error")
         self.remove_class("info")

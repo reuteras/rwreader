@@ -251,7 +251,9 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
 
                     # Check if the content actually contains real text
                     text_content = re.sub(r"[\s\n\r\t]+", " ", content_markdown).strip()
-                    if len(text_content) < 10:  # If barely any readable text  # noqa: PLR2004
+                    if (
+                        len(text_content) < 10
+                    ):  # If barely any readable text
                         logger.warning(
                             f"Converted content has almost no text: '{text_content}'"
                         )

@@ -43,7 +43,7 @@ class LinkableMarkdownViewer(MarkdownViewer):
 
         # Extract links when markdown is set
         if kwargs.get("markdown"):
-            self.extracted_links = self.extract_links(kwargs["markdown"])
+            self.extracted_links = self.extract_links(markdown_text=kwargs["markdown"])
 
     def extract_links(self, markdown_text: str) -> list[tuple[str, str]]:
         """Extract markdown links from text.
@@ -58,16 +58,16 @@ class LinkableMarkdownViewer(MarkdownViewer):
 
         # Match markdown links of the form [text](url)
         link_pattern = r"\[([^\]]+)\]\(([^)]+)\)"
-        for match in re.finditer(link_pattern, markdown_text):
+        for match in re.finditer(pattern=link_pattern, string=markdown_text):
             link_text = match.group(1).strip()
             link_url = match.group(2).strip()
             links.append((link_text, link_url))
 
         # Match HTML links of the form <a href="url">text</a>
         html_link_pattern = r'<a\s+href="([^"]+)"[^>]*>([^<]+)</a>'
-        for match in re.finditer(html_link_pattern, markdown_text):
-            link_url = match.group(1).strip()
-            link_text = match.group(2).strip()
+        for match in re.finditer(pattern=html_link_pattern, string=markdown_text):
+            link_url: str = match.group(1).strip()
+            link_text: str = match.group(2).strip()
             links.append((link_text, link_url))
 
         return links
@@ -84,23 +84,23 @@ class LinkableMarkdownViewer(MarkdownViewer):
                 markdown = "# Content Not Available\n\nThe article content could not be loaded."
 
             # Update the document
-            self.document.update(markdown)
+            self.document.update(markdown=markdown)
 
             # Re-extract links from the new content
-            self.extracted_links = self.extract_links(markdown)
+            self.extracted_links = self.extract_links(markdown_text=markdown)
         except Exception as e:
-            logger.error(f"Error updating markdown content: {e}")
+            logger.error(msg=f"Error updating markdown content: {e}")
             # Attempt to set a simple error message as fallback
             try:
                 self.document.update(
-                    "**Error loading content**\n\nPlease try again or check logs."
+                    markdown="**Error loading content**\n\nPlease try again or check logs."
                 )
             except Exception as nested_e:
                 logger.error(
-                    f"Failed to set error message in markdown viewer: {nested_e}"
+                    msg=f"Failed to set error message in markdown viewer: {nested_e}"
                 )
 
-    @on(Markdown.LinkClicked)
+    @on(message_type=Markdown.LinkClicked)
     def handle_link(self, event: Markdown.LinkClicked) -> None:
         """Open links in the default web browser or handle them as configured.
 
@@ -117,6 +117,6 @@ class LinkableMarkdownViewer(MarkdownViewer):
                 if hasattr(self.app, "notify"):
                     self.app.notify(message=f"Opening: {event.href}", title="Browser")
             elif hasattr(self.app, "handle_link_click"):
-                self.app.handle_link_click(link=event.href)
+                self.app.handle_link_click(link=event.href)  # type: ignore
             elif hasattr(self.app, "action_open_article_url"):
-                self.app.action_open_article_url()
+                self.app.action_open_article_url()  # type: ignore

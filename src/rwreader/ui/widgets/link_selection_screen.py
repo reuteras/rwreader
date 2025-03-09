@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import httpx
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import (
     Footer,
@@ -23,7 +24,7 @@ logger: logging.Logger = logging.getLogger(name=__name__)
 class LinkSelectionScreen(ModalScreen):
     """Modal screen to show extracted links and allow selection."""
 
-    BINDINGS = [
+    BINDINGS: list[Binding | tuple[str, str] | tuple[str, str, str]] = [  # noqa: RUF012
         ("escape", "cancel", "Cancel"),
         ("enter", "select", "Select"),
     ]
@@ -44,9 +45,11 @@ class LinkSelectionScreen(ModalScreen):
             open_after_save: Whether to open the link after saving to Readwise
         """
         super().__init__()
-        self.links = links or []
-        self.action = action
-        self.open_after_save = open_after_save
+        self.links: list[tuple[str, str]] = links or []
+        self.action: Literal["browser"] | Literal["readwise"] | Literal["download"] = (
+            action
+        )
+        self.open_after_save: bool = open_after_save
         self.configuration = configuration
         self.http_client = httpx.Client(follow_redirects=True)
 
@@ -62,22 +65,22 @@ class LinkSelectionScreen(ModalScreen):
         else:
             title = "Select a link"
 
-        yield Static(f"# {title}\n\nPress [ESC] to go back", id="link-title")
+        yield Static(content=f"# {title}\n\nPress [ESC] to go back", id="link-title")
 
         # Handle empty links list
         if not self.links:
-            yield Static("No links found in article", id="no-links")
+            yield Static(content="No links found in article", id="no-links")
             return
 
         # Loading indicator (hidden initially)
         yield LoadingIndicator(id="loading-indicator")
 
         # Create a list view with all links
-        link_items = []
-        for i, (title, url) in enumerate(self.links):
-            display_text = f"{title}\n{url}"
+        link_items: list[ListItem] = []
+        for i, (title, url) in enumerate(iterable=self.links):
+            display_text: str = f"{title}\n{url}"
             link_items.append(
-                ListItem(Static(display_text, markup=False), id=f"link_{i}")
+                ListItem(Static(content=display_text, markup=False), id=f"link_{i}")
             )
 
         link_list = ListView(*link_items, id="link-list")
@@ -89,11 +92,15 @@ class LinkSelectionScreen(ModalScreen):
     def on_mount(self) -> None:
         """Set focus to the list view and hide loading indicator."""
         if self.links:
-            link_list = self.query_one("#link-list", ListView)
+            link_list: ListView = self.query_one(
+                selector="#link-list", expect_type=ListView
+            )
             link_list.focus()
 
         # Hide loading indicator initially
-        loading = self.query_one("#loading-indicator", LoadingIndicator)
+        loading: LoadingIndicator = self.query_one(
+            selector="#loading-indicator", expect_type=LoadingIndicator
+        )
         loading.display = False
 
     def action_cancel(self) -> None:
@@ -106,16 +113,22 @@ class LinkSelectionScreen(ModalScreen):
             self.dismiss()
             return
 
-        link_list = self.query_one("#link-list", ListView)
+        link_list: ListView = self.query_one(
+            selector="#link-list", expect_type=ListView
+        )
         if link_list.index is None:
-            self.app.notify("No link selected", title="Error", severity="warning")
+            self.app.notify(
+                message="No link selected", title="Error", severity="warning"
+            )
             self.dismiss()
             return
 
         try:
-            index = link_list.index
+            index: int = link_list.index
             if index < 0 or index >= len(self.links):
-                self.app.notify("Invalid selection", title="Error", severity="error")
+                self.app.notify(
+                    message="Invalid selection", title="Error", severity="error"
+                )
                 self.dismiss()
                 return
 
@@ -124,16 +137,16 @@ class LinkSelectionScreen(ModalScreen):
 
             # Process based on action type
             if self.action == "browser":
-                self._open_in_browser(url)
+                self._open_in_browser(url=url)
             elif self.action == "download":
-                self._download_file(url)
+                self._download_file(url=url)
             elif self.action == "readwise":
-                self._save_to_readwise(url)
+                self._save_to_readwise(url=url)
 
             self.dismiss()
         except Exception as e:
-            logger.error(f"Error processing link selection: {e}")
-            self.app.notify(f"Error: {e}", title="Error", severity="error")
+            logger.error(msg=f"Error processing link selection: {e}")
+            self.app.notify(message=f"Error: {e}", title="Error", severity="error")
             self.dismiss()
 
     def _open_in_browser(self, url: str) -> None:
@@ -142,8 +155,8 @@ class LinkSelectionScreen(ModalScreen):
         Args:
             url: URL to open
         """
-        webbrowser.open(url)
-        self.app.notify("Opening link in browser", title="Browser")
+        webbrowser.open(url=url)
+        self.app.notify(message="Opening link in browser", title="Browser")
 
     def _download_file(self, url: str) -> None:
         """Download a file from the URL.
@@ -153,39 +166,47 @@ class LinkSelectionScreen(ModalScreen):
         """
         try:
             # Show loading indicator
-            loading = self.query_one("#loading-indicator", LoadingIndicator)
+            loading: LoadingIndicator = self.query_one(
+                selector="#loading-indicator", expect_type=LoadingIndicator
+            )
             loading.display = True
 
             # Extract filename from URL
-            filename = Path(urlparse(url).path).name
+            filename: str = Path(urlparse(url=url).path).name
             if not filename:
                 filename = "downloaded_file"
 
             # Download path from configuration
-            download_folder = getattr(
-                self.configuration, "download_folder", Path.home() / "Downloads"
+            download_folder = Path(
+                getattr(
+                    self.configuration, "download_folder", Path.home() / "Downloads"
+                )
             )
-            download_path = download_folder / filename
+            download_path: Path = download_folder / filename
 
             # Download the file
-            with self.http_client.stream("GET", url) as response:
+            with self.http_client.stream(method="GET", url=url) as response:
                 response.raise_for_status()
-                with open(download_path, "wb") as f:
+                with open(file=download_path, mode="wb") as f:
                     for chunk in response.iter_bytes():
                         f.write(chunk)
 
             # Hide loading indicator
             loading.display = False
 
-            self.app.notify(f"File downloaded to {download_path}", title="Download")
+            self.app.notify(
+                message=f"File downloaded to {download_path}", title="Download"
+            )
         except Exception as e:
             # Hide loading indicator
-            loading = self.query_one("#loading-indicator", LoadingIndicator)
+            loading = self.query_one(
+                selector="#loading-indicator", expect_type=LoadingIndicator
+            )
             loading.display = False
 
-            logger.error(f"Error downloading file: {e}")
+            logger.error(msg=f"Error downloading file: {e}")
             self.app.notify(
-                f"Error downloading file: {e}", title="Error", severity="error"
+                message=f"Error downloading file: {e}", title="Error", severity="error"
             )
 
     def _save_to_readwise(self, url: str) -> None:
@@ -199,43 +220,47 @@ class LinkSelectionScreen(ModalScreen):
             or not self.configuration.readwise_token
         ):
             self.app.notify(
-                "No Readwise token configured", title="Error", severity="error"
+                message="No Readwise token configured", title="Error", severity="error"
             )
             return
 
         try:
             # Show loading indicator
-            loading = self.query_one("#loading-indicator", LoadingIndicator)
+            loading: LoadingIndicator = self.query_one(
+                selector="#loading-indicator", expect_type=LoadingIndicator
+            )
             loading.display = True
 
-            # Import readwise and use the API
-            import readwise
-
             # Save the document
-            success, response = readwise.save_document(url=url)
-
+            # TODO:success, response = self.client.save_document(url=url)
+            success: bool = False
+            response: Any = None
             # Hide loading indicator
             loading.display = False
 
             if success:
-                self.app.notify("Link saved to Readwise", title="Readwise")
+                self.app.notify(message="Link saved to Readwise", title="Readwise")
 
                 # Open in browser if requested
                 if self.open_after_save and hasattr(response, "url") and response.url:
-                    webbrowser.open(response.url)
+                    webbrowser.open(url=response.url)
             else:
-                error_msg = getattr(response, "error", "Unknown error")
+                error_msg: str = getattr(response, "error", "Unknown error")
                 self.app.notify(
-                    f"Error saving to Readwise: {error_msg}",
+                    message=f"Error saving to Readwise: {error_msg}",
                     title="Error",
                     severity="error",
                 )
         except Exception as e:
             # Hide loading indicator
-            loading = self.query_one("#loading-indicator", LoadingIndicator)
+            loading = self.query_one(
+                selector="#loading-indicator", expect_type=LoadingIndicator
+            )
             loading.display = False
 
-            logger.error(f"Error saving to Readwise: {e}")
+            logger.error(msg=f"Error saving to Readwise: {e}")
             self.app.notify(
-                f"Error saving to Readwise: {e}", title="Error", severity="error"
+                message=f"Error saving to Readwise: {e}",
+                title="Error",
+                severity="error",
             )

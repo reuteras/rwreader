@@ -25,7 +25,7 @@ class LoadMoreWidget(Static):
 
     def __init__(self, **kwargs) -> None:
         """Initialize the widget."""
-        super().__init__("", **kwargs)
+        super().__init__(content="", **kwargs)
         self.update_load_more()
 
     def update_load_more(self) -> None:
@@ -40,4 +40,4 @@ class LoadMoreWidget(Static):
         """Handle click events."""
         # Dispatch load_more action to the app
         if self.app:
-            self.app.action_load_more()
+            self.app.action_load_more()  # type: ignore

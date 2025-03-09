@@ -3,7 +3,7 @@
 from .confirm import ConfirmScreen, DeleteArticleScreen
 from .help import HelpScreen
 
-__all__ = [
+__all__: list[str] = [
     "ConfirmScreen",
     "DeleteArticleScreen",
     "HelpScreen",

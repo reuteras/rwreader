@@ -3,4 +3,4 @@
 # Re-export LinkSelectionScreen from the module
 from ..widgets.link_selection_screen import LinkSelectionScreen
 
-__all__ = ["LinkSelectionScreen"]
+__all__: list[str] = ["LinkSelectionScreen"]

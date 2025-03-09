@@ -1,8 +1,9 @@
 """Confirmation dialog screens for rwreader."""
 
-from typing import Any
+from typing import Any, Literal
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
@@ -11,7 +12,7 @@ from textual.widgets import Button, Static
 class ConfirmScreen(ModalScreen):
     """Modal screen for confirming actions like deletion."""
 
-    BINDINGS = [  # noqa: RUF012
+    BINDINGS: list[Binding | tuple[str, str] | tuple[str, str, str]] = [  # noqa: RUF012
         ("escape", "cancel", "Cancel"),
         ("enter", "confirm", "Confirm"),
     ]
@@ -22,7 +23,7 @@ class ConfirmScreen(ModalScreen):
         message: str = "Are you sure?",
         on_confirm=None,
         data: Any = None,
-        variant: str = "error",
+        variant: Literal["default", "primary", "success", "warning", "error"] = "error",
     ) -> None:
         """Initialize the confirmation screen.
 
@@ -34,20 +35,26 @@ class ConfirmScreen(ModalScreen):
             variant: Button variant (error, primary, success)
         """
         super().__init__()
-        self.dialog_title = title
-        self.message = message
+        self.dialog_title: str = title
+        self.message: str = message
         self.on_confirm = on_confirm
-        self.data = data
-        self.variant = variant
+        self.data: str = data
+        self.variant: (
+            Literal["default"]
+            | Literal["primary"]
+            | Literal["success"]
+            | Literal["warning"]
+            | Literal["error"]
+        ) = variant
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the confirmation screen."""
         with Container(id="confirm-container"):
             yield Static(f"# {self.dialog_title}", id="confirm-title")
-            yield Static(self.message, id="confirm-message")
+            yield Static(content=self.message, id="confirm-message")
             with Horizontal(id="confirm-buttons"):
-                yield Button("Confirm", id="confirm-button", variant=self.variant)
-                yield Button("Cancel", id="cancel-button")
+                yield Button(label="Confirm", id="confirm-button", variant=self.variant)
+                yield Button(label="Cancel", id="cancel-button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
@@ -66,13 +73,13 @@ class ConfirmScreen(ModalScreen):
             try:
                 self.on_confirm(self.data)
             except Exception as e:
-                self.app.notify(f"Error: {e}", title="Error", severity="error")
+                self.app.notify(message=f"Error: {e}", title="Error", severity="error")
 
-        self.dismiss(result)
+        self.dismiss(result=result)
 
     def action_cancel(self) -> None:
         """Cancel the action."""
-        self.dismiss({"confirmed": False})
+        self.dismiss(result={"confirmed": False})
 
 
 class DeleteArticleScreen(ConfirmScreen):
@@ -86,8 +93,8 @@ class DeleteArticleScreen(ConfirmScreen):
             article_title: Title of the article for the confirmation message
         """
         # Truncate title if too long
-        if len(article_title) > 50:
-            display_title = article_title[:47] + "..."
+        if len(article_title) > 50:  # noqa: PLR2004
+            display_title: str = article_title[:47] + "..."
         else:
             display_title = article_title
 
