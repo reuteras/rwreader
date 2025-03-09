@@ -1,6 +1,7 @@
 """UI helper functions for rwreader."""
 
 import logging
+import re
 from typing import Any
 
 from ..utils.markdown_converter import (
@@ -20,7 +21,14 @@ def safe_set_text_style(item: Any, style: str) -> None:
         style: Style to apply (e.g., "bold", "none", "italic")
     """
     # Validate the style before applying
-    valid_styles: list[str] = ["bold", "none", "italic", "underline", "strike", "reverse"]
+    valid_styles: list[str] = [
+        "bold",
+        "none",
+        "italic",
+        "underline",
+        "strike",
+        "reverse",
+    ]
 
     # If style is None or empty, use "none" as default
     if not style:
@@ -42,7 +50,7 @@ def safe_set_text_style(item: Any, style: str) -> None:
 
 
 def format_article_content(article: dict[str, Any]) -> str:
-    """Format article data into markdown content with error checking.
+    """Format article data into markdown content with enhanced error handling and fallbacks.
 
     Args:
         article: The article data dictionary
@@ -55,46 +63,115 @@ def format_article_content(article: dict[str, Any]) -> str:
         title = article.get("title", "Untitled")
         content = ""
 
+        # Debug: dump available fields and their types/sizes
+        logger.debug(f"Article keys: {list(article.keys())}")
+        for key, value in article.items():
+            if isinstance(value, str):
+                if key in ["content", "html_content", "text", "html", "body"]:
+                    logger.debug(f"Article[{key}] is string of length {len(value)}")
+                    if len(value) > 0:
+                        preview = (
+                            value[:100].replace("\n", " ") + "..."
+                            if len(value) > 100
+                            else value
+                        )
+                        logger.debug(f"Content preview: {preview}")
+                else:
+                    logger.debug(f"Article[{key}] = {value}")
+            else:
+                logger.debug(f"Article[{key}] type: {type(value)}")
+
         # Try different possible content fields with added debugging
         html_content = None
         content_field_used = None
-        
-        # Log available fields for debugging
-        logger.debug(f"Available fields in article: {list(article.keys())}")
-        
-        # Check for html_content first (preferred)
-        if article.get("html_content"):
-            html_content = article["html_content"]
-            content_field_used = "html_content"
-            logger.debug("Using html_content field")
-        elif article.get("full_html"):
-            html_content = article["full_html"]
-            content_field_used = "full_html"
-            logger.debug("Using full_html field")
-        # Then check for regular content
-        elif article.get("content"):
-            content = article["content"]
-            content_field_used = "content"
-            logger.debug("Using content field")
-        # Try other possible fields
-        else:
-            for field in ["html", "text", "full_text", "article_text", "document"]:
-                if article.get(field):
+
+        # Define all possible content field names
+        html_content_fields = [
+            "html_content",
+            "full_html",
+            "html",
+            "fullHtml",
+            "webContent",
+        ]
+        plain_content_fields = [
+            "content",
+            "text",
+            "full_text",
+            "article_text",
+            "document",
+            "body",
+            "articleContent",
+            "fullText",
+        ]
+
+        # Try to find HTML content first (higher quality)
+        for field in html_content_fields:
+            if (
+                article.get(field)
+                and isinstance(article[field], str)
+                and len(article[field]) > 0
+            ):
+                html_content = article[field]
+                content_field_used = field
+                logger.debug(f"Using {field} field as HTML content")
+                break
+
+        # If no HTML content found, try plain content fields
+        if not html_content:
+            for field in plain_content_fields:
+                if (
+                    article.get(field)
+                    and isinstance(article[field], str)
+                    and len(article[field]) > 0
+                ):
                     content = article[field]
                     content_field_used = field
-                    logger.debug(f"Using {field} field")
+                    logger.debug(f"Using {field} field as plain content")
                     break
-        
-        # If no content found, log this
+
+        # If still no content found, try any field that might contain text
         if not html_content and not content:
-            logger.warning("No content found in article")
+            # Find the largest string field that might contain content
+            largest_field = None
+            largest_size = 0
+            for field, value in article.items():
+                if isinstance(value, str) and len(value) > 100:
+                    if field not in ["id", "title", "url", "author", "site_name"]:
+                        if len(value) > largest_size:
+                            largest_size = len(value)
+                            largest_field = field
+
+            if largest_field:
+                content = article[largest_field]
+                content_field_used = largest_field
+                logger.debug(
+                    f"Using largest text field '{largest_field}' as content ({largest_size} bytes)"
+                )
+
+        # Last resort: check for raw attribute text
+        if not html_content and not content and hasattr(article, "__dict__"):
+            for attr_name, attr_value in article.__dict__.items():
+                if isinstance(attr_value, str) and len(attr_value) > 100:
+                    if attr_name not in ["id", "title", "url", "author", "site_name"]:
+                        content = attr_value
+                        content_field_used = f"__dict__.{attr_name}"
+                        logger.debug(
+                            f"Using attribute '{attr_name}' as content ({len(attr_value)} bytes)"
+                        )
+                        break
+
+        # If no content found, log a clear warning
+        if not html_content and not content:
+            logger.warning("NO CONTENT FOUND IN ARTICLE - All content fields are empty")
 
         # Use html_content if available, otherwise use content
         raw_content = html_content if html_content else content
-        
+
         # Log the size of the raw content
         if raw_content:
-            logger.debug(f"Raw content size ({content_field_used}): {len(raw_content)}")
+            logger.debug(
+                f"Raw content size ({content_field_used}): {len(raw_content)} bytes"
+            )
         else:
             logger.debug("Raw content is empty or None")
 
@@ -130,7 +207,7 @@ def format_article_content(article: dict[str, Any]) -> str:
             metadata.append(f"*Added: {created_at}*")
         if updated_at and updated_at != created_at:
             metadata.append(f"*Updated: {updated_at}*")
-        if word_count and isinstance(word_count, (int | float)):
+        if word_count and isinstance(word_count, int | float):
             metadata.append(f"*{word_count} words*")
         metadata.append(f"*Category: {category}*")
 
@@ -153,33 +230,69 @@ def format_article_content(article: dict[str, Any]) -> str:
             if isinstance(raw_content, str):
                 lower_content = raw_content.lower()
                 if (
-                    "<html" in lower_content or
-                    "<body" in lower_content or
-                    "<div" in lower_content or
-                    "<p>" in lower_content or
-                    content_field_used in ["html_content", "full_html"]
+                    "<html" in lower_content
+                    or "<body" in lower_content
+                    or "<div" in lower_content
+                    or "<p>" in lower_content
+                    or content_field_used in ["html_content", "full_html"]
+                    or raw_content.strip().startswith("<")
                 ):
                     is_html = True
-                    
+
             logger.debug(f"Content detected as HTML: {is_html}")
-            
+
             if is_html:
                 # Convert HTML to markdown
-                content_markdown = render_html_to_markdown(raw_content)
-                logger.debug(f"Converted HTML to markdown, size: {len(content_markdown)}")
+                try:
+                    content_markdown = render_html_to_markdown(raw_content)
+                    logger.debug(
+                        f"Converted HTML to markdown, size: {len(content_markdown)}"
+                    )
+
+                    # Check if the content actually contains real text
+                    text_content = re.sub(r"[\s\n\r\t]+", " ", content_markdown).strip()
+                    if len(text_content) < 10:  # If barely any readable text
+                        logger.warning(
+                            f"Converted content has almost no text: '{text_content}'"
+                        )
+                        # Try again treating as plain text
+                        content_markdown = raw_content
+                        logger.debug("Falling back to raw content as plain text")
+                except Exception as e:
+                    logger.error(f"Error converting HTML to markdown: {e}")
+                    # Use raw content as fallback
+                    content_markdown = raw_content
+                    logger.debug("Using raw content after HTML conversion error")
             else:
                 # Use raw content as is
                 content_markdown = raw_content
-                logger.debug(f"Using raw content as markdown, size: {len(content_markdown)}")
+                logger.debug(
+                    f"Using raw content as plain text, size: {len(content_markdown)}"
+                )
+
+            # Final check - if content is still empty or too short, show an error
+            if not content_markdown or len(content_markdown.strip()) < 10:
+                logger.warning(f"Final content too short: '{content_markdown}'")
+                content_markdown = (
+                    "*The article content appears to be empty or could not be properly retrieved.*\n\n"
+                    + "This might be due to:\n"
+                    + "* Readwise API limitations\n"
+                    + "* Content protection on the original site\n"
+                    + "* An error in content processing\n\n"
+                    + "Try opening the article in your browser instead."
+                )
         else:
-            content_markdown = "*No content available. Try opening the article in browser.*"
+            content_markdown = (
+                "*No content available. Try opening the article in browser.*"
+            )
             logger.debug("No content available")
 
         return header + content_markdown
 
     except Exception as e:
-        logger.error(f"Error formatting article content: {e}")
+        logger.error(f"Error formatting article content: {e}", exc_info=True)
         return "# Error Formatting Content\n\nThere was an error preparing the article content. Please try again."
+
 
 def safe_get_article_display_title(article: dict[str, Any]) -> str:
     """Safely create a display title for an article with proper error handling.

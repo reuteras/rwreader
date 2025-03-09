@@ -116,23 +116,20 @@ class Configuration:
             help="Enable info logging",
             default=False,
         )
-        arg_parser.add_argument(
-            "--log-file",
-            dest="rwreader_log",
-            help="Path to the log file",
-            default="rwreader.log",
-        )
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
-        if not args.debug and not args.info:
-            args.rwreader_log = "/dev/null"
+        log_dir: Path = Path.home() / ".rwreader" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Configure the log file path
+        log_file: Path = log_dir / "rwreader.log"
 
         # Set up logging
         logging.basicConfig(
             level=logging.WARNING,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=[
-                logging.FileHandler(filename=args.rwreader_log),
+                logging.FileHandler(filename=log_file, mode="a"),
             ],
         )
         logger: logging.Logger = logging.getLogger(name=__name__)

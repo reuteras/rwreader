@@ -279,7 +279,11 @@ class RWReader(App[None]):
             await self.action_load_more()
 
     async def display_article(self, article_id: str) -> None:
-        """Fetch and display article content with improved error handling and link support."""
+        """Fetch and display article content with improved error handling and diagnostics.
+
+        Args:
+            article_id: ID of the article to retrieve
+        """
         if not article_id:
             logger.warning("Attempted to display article with empty ID")
             self.notify(message="Invalid article ID", title="Error", severity="error")
@@ -290,9 +294,12 @@ class RWReader(App[None]):
         content_view.update_content(markdown="# Loading article...\n\nPlease wait...")
 
         try:
-            # Fetch the article
+            # Fetch the article with debug logging
+            logger.debug(f"Beginning article fetch for ID: {article_id}")
             article = self.client.get_article(article_id=article_id)
+
             if not article:
+                logger.error(f"Article not found or returned None: {article_id}")
                 self.notify(
                     message=f"Article not found: {article_id}",
                     title="Error",
@@ -303,14 +310,48 @@ class RWReader(App[None]):
                 )
                 return
 
+            # Debug log article
+            logger.debug(f"Article successfully fetched with ID: {article_id}")
+            logger.debug(f"Article type: {type(article)}")
+            logger.debug(f"Article has content: {bool(article.get('content'))}")
+            logger.debug(
+                f"Article has html_content: {bool(article.get('html_content'))}"
+            )
+
+            # Test direct access to content for debugging
+            if article.get("content"):
+                content_length = len(article["content"])
+                logger.debug(f"Direct content length: {content_length}")
+                if content_length > 0:
+                    preview = article["content"][:100].replace("\n", " ")
+                    logger.debug(f"Content preview: {preview}...")
+            elif article.get("html_content"):
+                content_length = len(article["html_content"])
+                logger.debug(f"Direct html_content length: {content_length}")
+                if content_length > 0:
+                    preview = article["html_content"][:100].replace("\n", " ")
+                    logger.debug(f"HTML content preview: {preview}...")
+            else:
+                logger.warning("Neither content nor html_content is present in article")
+
+                # Check for any large string fields that might contain content
+                for key, value in article.items():
+                    if isinstance(value, str) and len(value) > 200:
+                        logger.debug(
+                            f"Found large string in field '{key}': {len(value)} bytes"
+                        )
+
             # Update state
             self.current_article = article
             self.current_article_id = article_id
 
             # Format content with the new utility function
+            logger.debug("Calling format_article_content")
             self.content_markdown = format_article_content(article=article)
+            logger.debug(f"Formatted content length: {len(self.content_markdown)}")
 
             # Display content using LinkableMarkdownViewer
+            logger.debug("Creating new markdown viewer")
             content_view = self.query_one("#content")
             await content_view.remove()
 
@@ -321,8 +362,10 @@ class RWReader(App[None]):
                 show_table_of_contents=False,
                 open_links=False,  # Handle links ourselves
             )
+            logger.debug("Mounting new viewer")
             content_container = self.query_one("Vertical")
             await content_container.mount(new_viewer)
+            logger.debug("Viewer mounted successfully")
 
             # Auto-mark as read if enabled
             if (
@@ -330,6 +373,7 @@ class RWReader(App[None]):
                 and not article.get("read", False)
                 and not article.get("state") == "finished"
             ):
+                logger.debug(f"Auto-marking article {article_id} as read")
                 self.client.toggle_read(article_id=article_id, read=True)
 
                 # Update item style without refreshing everything
@@ -338,8 +382,11 @@ class RWReader(App[None]):
                     if hasattr(item, "id") and item.id == f"art_{article_id}":
                         safe_set_text_style(item=item, style="none")
                         break
+
+            logger.debug("Article display complete")
+
         except Exception as e:
-            logger.error(msg=f"Error displaying article: {e}")
+            logger.error(f"Error displaying article: {e}", exc_info=True)
             self.notify(
                 message=f"Error displaying article: {e}",
                 title="Error",
@@ -349,12 +396,11 @@ class RWReader(App[None]):
             # Set a fallback message in the content viewer
             try:
                 content_view.update_content(
-                    markdown="# Error Loading Article\n\nThere was a problem loading the article content."
+                    markdown="# Error Loading Article\n\nThere was a problem loading the article content.\n\n"
+                    + f"**Error details:** {e!s}"
                 )
             except Exception as nested_e:
-                logger.error(
-                    msg=f"Failed to set error message in content view: {nested_e}"
-                )
+                logger.error(f"Failed to set error message in content view: {nested_e}")
 
     # Direct navigation actions
     async def action_goto_inbox(self) -> None:

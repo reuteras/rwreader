@@ -326,7 +326,7 @@ class ReadwiseClient:
                 }
 
     def get_article(self, article_id: str) -> dict[str, Any] | None:
-        """Get full article content.
+        """Get full article content with enhanced debugging.
 
         Args:
             article_id: ID of the article to retrieve
@@ -341,90 +341,212 @@ class ReadwiseClient:
             if article.get("content") or article.get("html_content"):
                 logger.debug(f"Using cached article with content for {article_id}")
                 return article
-        
+
         try:
             logger.debug(f"Fetching full article content for {article_id}")
-            
+
             # Get document by ID first without html content
-            document = self._api.get_document_by_id(doc_id=article_id)  # FIXED: using doc_id parameter
-            
+            document = None
+            try:
+                document = self._api.get_document_by_id(doc_id=article_id)
+                logger.debug(f"Document retrieved type: {type(document)}")
+            except Exception as doc_error:
+                logger.error(f"Error getting document by ID: {doc_error}")
+                # Try alternate method if doc_id doesn't work
+                try:
+                    document = self._api.get_document_by_id(id=article_id)
+                    logger.debug(
+                        "Successfully retrieved document using 'id' parameter instead of 'doc_id'"
+                    )
+                except Exception as alt_error:
+                    logger.error(f"Alternate method also failed: {alt_error}")
+
             if document:
                 logger.debug(f"Successfully fetched base document for {article_id}")
-                
+
+                # Log document attributes for debugging
+                document_attrs = dir(document)
+                logger.debug(f"Document attributes: {document_attrs}")
+
+                for attr in ["content", "html_content", "id", "title"]:
+                    if hasattr(document, attr):
+                        logger.debug(f"Document.{attr}: {getattr(document, attr)}")
+
                 # Create base article dict from the document
                 article = self._convert_document_to_dict(document)
-                
+
+                # Debug: print initial article content
+                logger.debug(
+                    f"Initial article content present: {bool(article.get('content'))}"
+                )
+                logger.debug(f"Initial article keys: {article.keys()}")
+
                 # Now try getting the article with content
                 logger.debug(f"Fetching HTML content for {article_id}")
                 try:
                     # Make a direct API call with withHtmlContent
-                    params = {
-                        "id": article_id,
-                        "withHtmlContent": "true"
-                    }
+                    params = {"id": article_id, "withHtmlContent": "true"}
                     response = requests.get(
                         url=f"{self._api.URL_BASE}/list/",
                         headers={"Authorization": f"Token {self.token}"},
                         params=params,
-                        timeout=self._timeout
+                        timeout=self._timeout,
                     )
                     response.raise_for_status()
                     data = response.json()
-                    
-                    logger.debug(f"Got HTML content response for {article_id}: count={data.get('count', 0)}")
-                    
+
+                    logger.debug(
+                        f"Got HTML content response for {article_id}: count={data.get('count', 0)}"
+                    )
+
                     if data.get("count", 0) > 0 and data.get("results", []):
                         first_result = data["results"][0]
-                        
-                        # Log the available fields for debugging
-                        logger.debug(f"Available fields in content result: {list(first_result.keys())}")
-                        
+
+                        # Log all available fields and their sizes
+                        logger.debug(
+                            f"Available fields in content result: {list(first_result.keys())}"
+                        )
+                        for field, value in first_result.items():
+                            if isinstance(value, str):
+                                logger.debug(
+                                    f"Field '{field}' size: {len(value)} bytes"
+                                )
+                                # Log sample of content for each text field
+                                if len(value) > 0 and field not in [
+                                    "id",
+                                    "title",
+                                    "author",
+                                ]:
+                                    preview = (
+                                        value[:100] + "..."
+                                        if len(value) > 100
+                                        else value
+                                    )
+                                    logger.debug(f"Field '{field}' preview: {preview}")
+
+                        # Try to get content from various fields
+                        content_found = False
+
+                        # Check for HTML content first
                         if first_result.get("html_content"):
                             article["html_content"] = first_result["html_content"]
-                            logger.debug(f"Successfully fetched HTML content for {article_id}")
-                        elif first_result.get("content"):
-                            article["content"] = first_result["content"]
-                            logger.debug(f"Using regular content for {article_id}")
+                            logger.debug(
+                                f"Found html_content: {len(first_result['html_content'])} bytes"
+                            )
+                            content_found = True
                         elif first_result.get("full_html"):
                             article["html_content"] = first_result["full_html"]
-                            logger.debug(f"Using full_html for {article_id}")
-                        elif first_result.get("text"):
-                            article["content"] = first_result["text"]
-                            logger.debug(f"Using text field for {article_id}")
-                        else:
-                            # Try other potential content fields
-                            for field in ["article_text", "full_text", "html", "document"]:
-                                if first_result.get(field):
+                            logger.debug(
+                                f"Found full_html: {len(first_result['full_html'])} bytes"
+                            )
+                            content_found = True
+                        elif first_result.get("content"):
+                            article["content"] = first_result["content"]
+                            logger.debug(
+                                f"Found content: {len(first_result['content'])} bytes"
+                            )
+                            content_found = True
+
+                        # If no standard content fields found, try other potential fields
+                        if not content_found:
+                            for field in [
+                                "text",
+                                "article_text",
+                                "full_text",
+                                "html",
+                                "document",
+                                "body",
+                                "article_content",
+                            ]:
+                                if (
+                                    first_result.get(field)
+                                    and isinstance(first_result[field], str)
+                                    and len(first_result[field]) > 0
+                                ):
                                     article["content"] = first_result[field]
-                                    logger.debug(f"Using {field} for {article_id}")
+                                    logger.debug(
+                                        f"Using {field} as content: {len(first_result[field])} bytes"
+                                    )
+                                    content_found = True
                                     break
-                                    
-                        # Log the size of the content fields
-                        if article.get("html_content"):
-                            logger.debug(f"HTML content size: {len(article['html_content'])}")
-                        if article.get("content"):
-                            logger.debug(f"Content size: {len(article['content'])}")
+
+                            # Last resort: try to get content from any large string field
+                            if not content_found:
+                                # Find the largest string field that might contain content
+                                largest_field = None
+                                largest_size = 0
+                                for field, value in first_result.items():
+                                    if (
+                                        isinstance(value, str)
+                                        and len(value) > largest_size
+                                        and field not in ["id", "title", "url"]
+                                    ):
+                                        largest_size = len(value)
+                                        largest_field = field
+
+                                if (
+                                    largest_field and largest_size > 100
+                                ):  # Only use if reasonably large
+                                    article["content"] = first_result[largest_field]
+                                    logger.debug(
+                                        f"Using largest field '{largest_field}' as content: {largest_size} bytes"
+                                    )
+                                    content_found = True
+
+                    # Log the result
+                    if article.get("html_content"):
+                        logger.debug(
+                            f"Final html_content size: {len(article['html_content'])}"
+                        )
+                    if article.get("content"):
+                        logger.debug(f"Final content size: {len(article['content'])}")
+
+                    # If we still don't have content, try a desperate measure: raw content from document
+                    if (
+                        not article.get("html_content")
+                        and not article.get("content")
+                        and hasattr(document, "content")
+                        and document.content
+                    ):
+                        article["content"] = document.content
+                        logger.debug(
+                            f"Using document.content as fallback: {len(document.content)} bytes"
+                        )
+
                 except Exception as e:
                     logger.error(f"Error fetching HTML content: {e}")
-                    # Keep the base document content
-                
+                    # Try to use any content from the original document as fallback
+                    if hasattr(document, "content") and document.content:
+                        article["content"] = document.content
+                        logger.debug(
+                            f"Using document.content after error: {len(document.content)} bytes"
+                        )
+
                 # Store in cache
                 self._article_cache[article_id] = article
-                
+
+                logger.debug(
+                    f"Final article has html_content: {bool(article.get('html_content'))}"
+                )
+                logger.debug(
+                    f"Final article has content: {bool(article.get('content'))}"
+                )
                 logger.debug(f"Successfully processed article {article_id}")
                 return article
             else:
                 logger.warning(f"No article found with ID {article_id}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error fetching article {article_id}: {e}")
-            
+
             # Return what we have in cache even if incomplete
             if article_id in self._article_cache:
-                logger.warning(f"Returning cached article for {article_id} without full content")
+                logger.warning(
+                    f"Returning cached article for {article_id} without full content"
+                )
                 return self._article_cache[article_id]
-            
+
             return None
 
     def move_to_inbox(self, article_id: str) -> bool:
