@@ -325,7 +325,7 @@ class ReadwiseClient:
                     "state": "reading",
                 }
 
-    def get_article(self, article_id: str) -> dict[str, Any] | None:  # noqa: PLR0912
+    def get_article(self, article_id: str) -> dict[str, Any] | None:
         """Get full article content.
 
         Args:
@@ -346,7 +346,7 @@ class ReadwiseClient:
             logger.debug(f"Fetching full article content for {article_id}")
             
             # Get document by ID first without html content
-            document = self._api.get_document_by_id(id=article_id)
+            document = self._api.get_document_by_id(doc_id=article_id)  # FIXED: using doc_id parameter
             
             if document:
                 logger.debug(f"Successfully fetched base document for {article_id}")
@@ -375,19 +375,35 @@ class ReadwiseClient:
                     
                     if data.get("count", 0) > 0 and data.get("results", []):
                         first_result = data["results"][0]
+                        
+                        # Log the available fields for debugging
+                        logger.debug(f"Available fields in content result: {list(first_result.keys())}")
+                        
                         if first_result.get("html_content"):
                             article["html_content"] = first_result["html_content"]
                             logger.debug(f"Successfully fetched HTML content for {article_id}")
                         elif first_result.get("content"):
                             article["content"] = first_result["content"]
                             logger.debug(f"Using regular content for {article_id}")
+                        elif first_result.get("full_html"):
+                            article["html_content"] = first_result["full_html"]
+                            logger.debug(f"Using full_html for {article_id}")
+                        elif first_result.get("text"):
+                            article["content"] = first_result["text"]
+                            logger.debug(f"Using text field for {article_id}")
                         else:
                             # Try other potential content fields
-                            for field in ["text", "article_text", "full_text"]:
+                            for field in ["article_text", "full_text", "html", "document"]:
                                 if first_result.get(field):
                                     article["content"] = first_result[field]
                                     logger.debug(f"Using {field} for {article_id}")
                                     break
+                                    
+                        # Log the size of the content fields
+                        if article.get("html_content"):
+                            logger.debug(f"HTML content size: {len(article['html_content'])}")
+                        if article.get("content"):
+                            logger.debug(f"Content size: {len(article['content'])}")
                 except Exception as e:
                     logger.error(f"Error fetching HTML content: {e}")
                     # Keep the base document content

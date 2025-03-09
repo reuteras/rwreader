@@ -41,7 +41,7 @@ def safe_set_text_style(item: Any, style: str) -> None:
             logger.error(f"Error setting fallback text style: {e}")
 
 
-def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
+def format_article_content(article: dict[str, Any]) -> str:
     """Format article data into markdown content with error checking.
 
     Args:
@@ -55,18 +55,48 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         title = article.get("title", "Untitled")
         content = ""
 
-        # Try different possible content fields
+        # Try different possible content fields with added debugging
         html_content = None
-        for content_field in ["html_content", "content", "html", "text", "document"]:
-            if article.get(content_field):
-                if content_field == "html_content":
-                    html_content = article[content_field]
+        content_field_used = None
+        
+        # Log available fields for debugging
+        logger.debug(f"Available fields in article: {list(article.keys())}")
+        
+        # Check for html_content first (preferred)
+        if article.get("html_content"):
+            html_content = article["html_content"]
+            content_field_used = "html_content"
+            logger.debug("Using html_content field")
+        elif article.get("full_html"):
+            html_content = article["full_html"]
+            content_field_used = "full_html"
+            logger.debug("Using full_html field")
+        # Then check for regular content
+        elif article.get("content"):
+            content = article["content"]
+            content_field_used = "content"
+            logger.debug("Using content field")
+        # Try other possible fields
+        else:
+            for field in ["html", "text", "full_text", "article_text", "document"]:
+                if article.get(field):
+                    content = article[field]
+                    content_field_used = field
+                    logger.debug(f"Using {field} field")
                     break
-                content = article[content_field]
-                break
+        
+        # If no content found, log this
+        if not html_content and not content:
+            logger.warning("No content found in article")
 
         # Use html_content if available, otherwise use content
         raw_content = html_content if html_content else content
+        
+        # Log the size of the raw content
+        if raw_content:
+            logger.debug(f"Raw content size ({content_field_used}): {len(raw_content)}")
+        else:
+            logger.debug("Raw content is empty or None")
 
         # Get metadata with safe defaults
         url = article.get("url", article.get("source_url", ""))
@@ -116,21 +146,40 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         header += "---\n\n"
 
         # Convert HTML to markdown if content is in HTML format
+        content_markdown = ""
         if raw_content:
-            # Check if content looks like HTML
-            if isinstance(raw_content, str) and ("<html" in raw_content.lower() or "<body" in raw_content.lower() or "<div" in raw_content.lower()):
+            # Look for common HTML indicators
+            is_html = False
+            if isinstance(raw_content, str):
+                lower_content = raw_content.lower()
+                if (
+                    "<html" in lower_content or
+                    "<body" in lower_content or
+                    "<div" in lower_content or
+                    "<p>" in lower_content or
+                    content_field_used in ["html_content", "full_html"]
+                ):
+                    is_html = True
+                    
+            logger.debug(f"Content detected as HTML: {is_html}")
+            
+            if is_html:
+                # Convert HTML to markdown
                 content_markdown = render_html_to_markdown(raw_content)
+                logger.debug(f"Converted HTML to markdown, size: {len(content_markdown)}")
             else:
+                # Use raw content as is
                 content_markdown = raw_content
+                logger.debug(f"Using raw content as markdown, size: {len(content_markdown)}")
         else:
             content_markdown = "*No content available. Try opening the article in browser.*"
+            logger.debug("No content available")
 
         return header + content_markdown
 
     except Exception as e:
         logger.error(f"Error formatting article content: {e}")
         return "# Error Formatting Content\n\nThere was an error preparing the article content. Please try again."
-
 
 def safe_get_article_display_title(article: dict[str, Any]) -> str:
     """Safely create a display title for an article with proper error handling.

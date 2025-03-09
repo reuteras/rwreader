@@ -23,11 +23,18 @@ def render_html_to_markdown(html_content: str) -> str:
         return "*No content available. Try opening the article in browser.*"
 
     try:
-        # Parse HTML with BeautifulSoup
+        # Add some debug logging to help diagnose issues
+        logger.debug(f"Converting HTML to markdown, content length: {len(html_content)}")
+        if len(html_content) > 200:
+            logger.debug(f"HTML content preview: {html_content[:200]}...")
+        else:
+            logger.debug(f"HTML content: {html_content}")
+            
+        # Parse HTML with BeautifulSoup - use html.parser which is more forgiving
         soup = BeautifulSoup(markup=html_content, features="html.parser")
 
         # Replace images with text descriptions
-        for img in soup.find_all(name="img"):
+        for img in soup.find_all("img"):
             if img.get("src"):
                 # Create a text placeholder for images
                 img_alt = img.get("alt", "No description")
@@ -37,7 +44,7 @@ def render_html_to_markdown(html_content: str) -> str:
         # Clean up code blocks for proper rendering
         for pre in soup.find_all("pre"):
             # Extract the code language if available
-            code_tag = pre.find("code")
+            code_tag: str = pre.find("code")
             if code_tag and code_tag.get("class"):
                 classes = code_tag.get("class")
                 language = ""
@@ -53,16 +60,34 @@ def render_html_to_markdown(html_content: str) -> str:
                     pre.replace_with(soup.new_string(f"```{language}\n{code_content}\n```"))
 
         # Convert to markdown using markdownify
-        markdown_text = md(str(soup))
+        # Fallback to simple string extraction if markdownify fails
+        try:
+            markdown_text = md(str(soup))
+        except Exception as conv_error:
+            logger.error(f"Markdownify error: {conv_error}, falling back to basic text extraction")
+            # Simple fallback - extract all text and preserve basic structure
+            markdown_text = soup.get_text(separator="\n\n")
 
         # Clean up the markdown
         markdown_text = _clean_markdown(markdown_text)
+        
+        # Log the result size
+        logger.debug(f"Converted markdown size: {len(markdown_text)}")
+        if len(markdown_text) > 200:
+            logger.debug(f"Markdown preview: {markdown_text[:200]}...")
 
         return markdown_text
     except Exception as e:
         logger.error(f"Error converting HTML to markdown: {e}")
-        return f"*Error rendering content: {e}*"
-
+        # Try a very basic fallback if BeautifulSoup fails
+        try:
+            # Remove HTML tags with a simple regex
+            text = re.sub('<[^<]+?>', ' ', html_content)
+            # Normalize whitespace
+            text = re.sub(r'\s+', ' ', text).strip()
+            return f"*Error rendering content: {e}*\n\n{text}"
+        except:
+            return f"*Error rendering content: {e}*"
 
 def _clean_markdown(markdown_text: str) -> str:
     """Clean up markdown text for better readability.
@@ -181,9 +206,14 @@ def format_timestamp(timestamp: str | int | float | None) -> str:
         
         # Check if timestamp is a unix timestamp (numeric string)
         if timestamp_str.isdigit() or isinstance(timestamp, (int | float)):
-            timestamp_int = int(float(timestamp_str))
+            timestamp_val = float(timestamp_str)
+            
+            # Check if timestamp is in milliseconds (13 digits) and convert to seconds if needed
+            if timestamp_val > 10000000000:  # Timestamps in milliseconds are typically > 10^12
+                timestamp_val = timestamp_val / 1000
+                
             # Convert from seconds to datetime
-            dt = datetime.fromtimestamp(timestamp_int)
+            dt = datetime.fromtimestamp(timestamp_val)
         else:
             # Try to parse as ISO format
             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
