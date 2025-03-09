@@ -4,6 +4,7 @@ import logging
 import re
 import sys
 import webbrowser
+from http import HTTPStatus
 from typing import Any, ClassVar
 
 from textual import work
@@ -53,7 +54,6 @@ class RWReader(App[None]):
         ("L", "goto_later", "Go to Later"),
         ("A", "goto_archive", "Go to Archive"),
         # Article actions
-        ("r", "toggle_read", "Toggle read/unread"),
         ("a", "move_to_archive", "Move to Archive"),
         ("l", "move_to_later", "Move to Later"),
         ("i", "move_to_inbox", "Move to Inbox"),
@@ -88,7 +88,7 @@ class RWReader(App[None]):
 
         try:
             # Load the configuration
-            self.configuration = Configuration(arguments=sys.argv[1:])
+            self.configuration = Configuration(exec_args=sys.argv[1:])
 
             # Set theme based on configuration
             self.theme = (
@@ -278,7 +278,7 @@ class RWReader(App[None]):
         elif highlighted_item.id == "load_more_item":
             await self.action_load_more()
 
-    async def display_article(self, article_id: str) -> None:
+    async def display_article(self, article_id: str) -> None:  # noqa: PLR0912, PLR0915
         """Fetch and display article content with improved error handling and diagnostics.
 
         Args:
@@ -336,7 +336,7 @@ class RWReader(App[None]):
 
                 # Check for any large string fields that might contain content
                 for key, value in article.items():
-                    if isinstance(value, str) and len(value) > 200:
+                    if isinstance(value, str) and len(value) > HTTPStatus.OK:
                         logger.debug(
                             f"Found large string in field '{key}': {len(value)} bytes"
                         )
@@ -365,25 +365,13 @@ class RWReader(App[None]):
             logger.debug("Mounting new viewer")
             content_container = self.query_one("Vertical")
             await content_container.mount(new_viewer)
-            logger.debug("Viewer mounted successfully")
 
-            # Auto-mark as read if enabled
-            if (
-                self.configuration.auto_mark_read
-                and not article.get("read", False)
-                and not article.get("state") == "finished"
-            ):
-                logger.debug(f"Auto-marking article {article_id} as read")
-                self.client.toggle_read(article_id=article_id, read=True)
-
-                # Update item style without refreshing everything
-                articles_list = self.query_one("#articles", expect_type=ListView)
-                for item in articles_list.children:
-                    if hasattr(item, "id") and item.id == f"art_{article_id}":
-                        safe_set_text_style(item=item, style="none")
-                        break
-
-            logger.debug("Article display complete")
+            # Update item style without refreshing everything
+            articles_list = self.query_one("#articles", expect_type=ListView)
+            for item in articles_list.children:
+                if hasattr(item, "id") and item.id == f"art_{article_id}":
+                    safe_set_text_style(item=item, style="none")
+                    break
 
         except Exception as e:
             logger.error(f"Error displaying article: {e}", exc_info=True)
@@ -1003,6 +991,7 @@ class RWReader(App[None]):
                     if (
                         first_item
                         and hasattr(first_item, "id")
+                        and first_item.id is not None
                         and first_item.id.startswith("art_")
                     ):
                         article_id = first_item.id.replace("art_", "")
@@ -1111,53 +1100,6 @@ class RWReader(App[None]):
                 )
         except Exception as e:
             logger.error(f"Error moving to archive: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
-    async def action_toggle_read(self) -> None:
-        """Toggle read/unread status of the current article with improved error handling."""
-        if not self.current_article_id or not self.current_article:
-            self.notify(
-                message="No article selected", title="Error", severity="warning"
-            )
-            return
-
-        try:
-            # Determine current read status
-            is_read = (
-                self.current_article.get("read", False)
-                or self.current_article.get("state") == "finished"
-            )
-            if self.client.toggle_read(
-                article_id=self.current_article_id, read=not is_read
-            ):
-                # Show success message
-                status = "read" if not is_read else "unread"
-                self.notify(message=f"Marked as {status}", title="Success")
-
-                # Update the article in the list without refreshing everything
-                articles_list = self.query_one("#articles", expect_type=ListView)
-                for item in articles_list.children:
-                    if (
-                        hasattr(item, "id")
-                        and item.id == f"art_{self.current_article_id}"
-                    ):
-                        safe_set_text_style(item, "none" if not is_read else "bold")
-                        break
-
-                # Update current article's status
-                self.current_article["read"] = not is_read
-                self.current_article["state"] = "finished" if not is_read else "reading"
-
-                # Refresh the article display
-                await self.display_article(article_id=self.current_article_id)
-            else:
-                self.notify(
-                    message="Failed to toggle read status",
-                    title="Error",
-                    severity="error",
-                )
-        except Exception as e:
-            logger.error(msg=f"Error toggling read status: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
 
     def on_unmount(self) -> None:

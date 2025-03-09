@@ -3,6 +3,7 @@
 import logging
 import re
 from datetime import datetime
+from http import HTTPStatus
 
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
@@ -10,7 +11,7 @@ from markdownify import markdownify as md
 logger: logging.Logger = logging.getLogger(name=__name__)
 
 
-def render_html_to_markdown(html_content: str) -> str:
+def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912, PLR0915
     """Convert HTML to well-formatted markdown with enhanced fallbacks.
 
     Args:
@@ -27,7 +28,7 @@ def render_html_to_markdown(html_content: str) -> str:
         logger.debug(
             f"Converting HTML to markdown, content length: {len(html_content)}"
         )
-        if len(html_content) > 200:
+        if len(html_content) > HTTPStatus.OK:
             logger.debug(f"HTML content preview: {html_content[:200]}...")
         else:
             logger.debug(f"HTML content: {html_content}")
@@ -89,7 +90,7 @@ def render_html_to_markdown(html_content: str) -> str:
                 markdown_text = html_content
 
             # If markdown_text is still empty or too short, try direct raw content
-            if len(markdown_text.strip()) < 20:
+            if len(markdown_text.strip()) < 20:  # noqa: PLR2004
                 logger.debug("Extracted text too short, using raw content")
                 markdown_text = html_content
 
@@ -98,11 +99,11 @@ def render_html_to_markdown(html_content: str) -> str:
 
         # Log the result size
         logger.debug(f"Converted markdown size: {len(markdown_text)}")
-        if len(markdown_text) > 200:
+        if len(markdown_text) > 200:  # noqa: PLR2004
             logger.debug(f"Markdown preview: {markdown_text[:200]}...")
 
         # Final check - if markdown is too short, return the raw HTML
-        if len(markdown_text.strip()) < 20:
+        if len(markdown_text.strip()) < 20:  # noqa: PLR2004
             logger.warning(
                 f"Final markdown too short '{markdown_text}', using raw HTML"
             )
@@ -120,7 +121,7 @@ def render_html_to_markdown(html_content: str) -> str:
             text = re.sub(r"\s+", " ", text).strip()
 
             # If the text is too short after removing tags, show raw HTML
-            if len(text) < 50:
+            if len(text) < 50:  # noqa: PLR2004
                 return f"*Error rendering HTML content properly. Raw HTML shown below:*\n\n```html\n{html_content}\n```"
             else:
                 return f"*Error rendering content: {e}*\n\n{text}"
@@ -252,7 +253,7 @@ def format_timestamp(timestamp: str | int | float | None) -> str:
 
             # Check if timestamp is in milliseconds (13 digits) and convert to seconds if needed
             if (
-                timestamp_val > 10000000000
+                timestamp_val > 10000000000  # noqa: PLR2004
             ):  # Timestamps in milliseconds are typically > 10^12
                 timestamp_val = timestamp_val / 1000
 

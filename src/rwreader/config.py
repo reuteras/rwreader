@@ -18,8 +18,6 @@ DEFAULT_CONFIG = """[general]
 cache_size = 10000
 # Default theme (dark or light)
 default_theme = "dark"
-# Whether to automatically mark articles as read when opened
-auto_mark_read = true
 
 [readwise]
 # Readwise API token - can use op command for 1Password integration
@@ -69,14 +67,16 @@ def get_conf_value(op_command: str) -> str:
 class Configuration:
     """A class to handle configuration values."""
 
-    def __init__(self, arguments=None) -> None:  # noqa: PLR0915
+    def __init__(self, exec_args=None) -> None:  # noqa: PLR0915
         """Initialize the configuration.
 
         Args:
-            arguments: Command line arguments
+            exec_args: Command line arguments
         """
-        if arguments is None:
+        if exec_args is None:
             arguments: list[str] = sys.argv[1:]
+        else:
+            arguments = exec_args
 
         # Use argparse to add arguments
         arg_parser = argparse.ArgumentParser(
@@ -172,7 +172,6 @@ class Configuration:
             general_config = self.config.get("general", {})
             self.cache_size: int = general_config.get("cache_size", 10000)
             self.default_theme: str = general_config.get("default_theme", "dark")
-            self.auto_mark_read: bool = general_config.get("auto_mark_read", True)
 
             # Get display settings
             display_config = self.config.get("display", {})

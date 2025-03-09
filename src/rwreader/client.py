@@ -56,8 +56,6 @@ class ReadwiseClient:
         # Create the ReadwiseReader client
         self._api = ReadwiseReader(token=token)
 
-        logger.debug("Initialized Readwise client with improved v3 API")
-
     def get_inbox(
         self, refresh: bool = False, limit: int | None = None
     ) -> list[dict[str, Any]]:
@@ -111,23 +109,17 @@ class ReadwiseClient:
             and cache_age < self._cache_expiry
             and cache.get("timeframe") == timeframe
         ):
-            logger.debug(f"Using cached data for archive (age: {cache_age:.1f}s)")
             return cache["data"][:limit] if limit else cache["data"]
 
         try:
             # Calculate the date range based on timeframe
             updated_after = self._get_date_for_timeframe(timeframe)
 
-            # Get archive articles with date filtering
-            logger.debug(f"Getting archive articles updated after {updated_after}")
-
             # Get documents without withHtmlContent first to avoid potential issues
             try:
                 documents = self._api.get_documents(
                     location="archive", updated_after=updated_after
                 )
-
-                logger.debug(f"Successfully fetched {len(documents)} archive documents")
 
                 # Convert to our internal format
                 articles = [self._convert_document_to_dict(doc) for doc in documents]
@@ -137,10 +129,6 @@ class ReadwiseClient:
                 cache["last_updated"] = current_time
                 cache["complete"] = True
                 cache["timeframe"] = timeframe
-
-                logger.debug(
-                    f"Processed {len(articles)} archive articles with timeframe: {timeframe}"
-                )
 
                 # Update the article cache
                 for article in articles:
@@ -206,7 +194,6 @@ class ReadwiseClient:
         cache_age = current_time - cache["last_updated"]
 
         if not refresh and cache["data"] and cache_age < self._cache_expiry:
-            logger.debug(f"Using cached data for {cache_key} (age: {cache_age:.1f}s)")
             return cache["data"][:limit] if limit else cache["data"]
 
         try:
@@ -224,10 +211,6 @@ class ReadwiseClient:
             try:
                 documents = self._api.get_documents(location=api_location)
 
-                logger.debug(
-                    f"Successfully fetched {len(documents)} {cache_key} documents"
-                )
-
                 # Convert documents to our expected format
                 articles = [self._convert_document_to_dict(doc) for doc in documents]
 
@@ -235,8 +218,6 @@ class ReadwiseClient:
                 cache["data"] = articles
                 cache["last_updated"] = current_time
                 cache["complete"] = True
-
-                logger.debug(f"Processed {len(articles)} {cache_key} articles")
 
                 # Update the article cache
                 for article in articles:
@@ -264,9 +245,6 @@ class ReadwiseClient:
             Article data in dict format
         """
         try:
-            # Log the document to debug
-            logger.debug(f"Converting document to dict: {document.id}")
-
             # Convert document attributes to our dictionary format
             article_dict = {
                 "id": document.id,
@@ -285,18 +263,14 @@ class ReadwiseClient:
                 "archived": document.location == "archive",
                 "saved_for_later": document.location == "later",
                 # Add additional fields for compatibility with the existing code
-                "read": document.reading_progress >= 95
+                "read": document.reading_progress >= 95  # noqa: PLR2004
                 if document.reading_progress
                 else False,
                 "state": "finished"
-                if (document.reading_progress and document.reading_progress >= 95)
+                if (document.reading_progress and document.reading_progress >= 95)  # noqa: PLR2004
                 else "reading",
                 "reading_progress": document.reading_progress or 0,
             }
-
-            # Log dictionary creation success
-            logger.debug(f"Converted document {document.id} to dictionary format")
-
             return article_dict
         except Exception as e:
             logger.error(f"Error converting document to dict: {e}")
@@ -325,7 +299,7 @@ class ReadwiseClient:
                     "state": "reading",
                 }
 
-    def get_article(self, article_id: str) -> dict[str, Any] | None:
+    def get_article(self, article_id: str) -> dict[str, Any] | None:  # noqa: PLR0912, PLR0915
         """Get full article content with enhanced debugging.
 
         Args:
@@ -339,50 +313,25 @@ class ReadwiseClient:
             article = self._article_cache[article_id]
             # Check if the article in cache has content or html_content
             if article.get("content") or article.get("html_content"):
-                logger.debug(f"Using cached article with content for {article_id}")
                 return article
 
         try:
-            logger.debug(f"Fetching full article content for {article_id}")
-
             # Get document by ID first without html content
             document = None
             try:
-                document = self._api.get_document_by_id(doc_id=article_id)
-                logger.debug(f"Document retrieved type: {type(document)}")
+                document = self._api.get_document_by_id(id=article_id)
             except Exception as doc_error:
                 logger.error(f"Error getting document by ID: {doc_error}")
                 # Try alternate method if doc_id doesn't work
                 try:
                     document = self._api.get_document_by_id(id=article_id)
-                    logger.debug(
-                        "Successfully retrieved document using 'id' parameter instead of 'doc_id'"
-                    )
                 except Exception as alt_error:
                     logger.error(f"Alternate method also failed: {alt_error}")
 
             if document:
-                logger.debug(f"Successfully fetched base document for {article_id}")
-
-                # Log document attributes for debugging
-                document_attrs = dir(document)
-                logger.debug(f"Document attributes: {document_attrs}")
-
-                for attr in ["content", "html_content", "id", "title"]:
-                    if hasattr(document, attr):
-                        logger.debug(f"Document.{attr}: {getattr(document, attr)}")
-
                 # Create base article dict from the document
                 article = self._convert_document_to_dict(document)
-
-                # Debug: print initial article content
-                logger.debug(
-                    f"Initial article content present: {bool(article.get('content'))}"
-                )
-                logger.debug(f"Initial article keys: {article.keys()}")
-
-                # Now try getting the article with content
-                logger.debug(f"Fetching HTML content for {article_id}")
+                
                 try:
                     # Make a direct API call with withHtmlContent
                     params = {"id": article_id, "withHtmlContent": "true"}
@@ -395,34 +344,8 @@ class ReadwiseClient:
                     response.raise_for_status()
                     data = response.json()
 
-                    logger.debug(
-                        f"Got HTML content response for {article_id}: count={data.get('count', 0)}"
-                    )
-
                     if data.get("count", 0) > 0 and data.get("results", []):
                         first_result = data["results"][0]
-
-                        # Log all available fields and their sizes
-                        logger.debug(
-                            f"Available fields in content result: {list(first_result.keys())}"
-                        )
-                        for field, value in first_result.items():
-                            if isinstance(value, str):
-                                logger.debug(
-                                    f"Field '{field}' size: {len(value)} bytes"
-                                )
-                                # Log sample of content for each text field
-                                if len(value) > 0 and field not in [
-                                    "id",
-                                    "title",
-                                    "author",
-                                ]:
-                                    preview = (
-                                        value[:100] + "..."
-                                        if len(value) > 100
-                                        else value
-                                    )
-                                    logger.debug(f"Field '{field}' preview: {preview}")
 
                         # Try to get content from various fields
                         content_found = False
@@ -430,21 +353,12 @@ class ReadwiseClient:
                         # Check for HTML content first
                         if first_result.get("html_content"):
                             article["html_content"] = first_result["html_content"]
-                            logger.debug(
-                                f"Found html_content: {len(first_result['html_content'])} bytes"
-                            )
                             content_found = True
                         elif first_result.get("full_html"):
                             article["html_content"] = first_result["full_html"]
-                            logger.debug(
-                                f"Found full_html: {len(first_result['full_html'])} bytes"
-                            )
                             content_found = True
                         elif first_result.get("content"):
                             article["content"] = first_result["content"]
-                            logger.debug(
-                                f"Found content: {len(first_result['content'])} bytes"
-                            )
                             content_found = True
 
                         # If no standard content fields found, try other potential fields
@@ -464,9 +378,6 @@ class ReadwiseClient:
                                     and len(first_result[field]) > 0
                                 ):
                                     article["content"] = first_result[field]
-                                    logger.debug(
-                                        f"Using {field} as content: {len(first_result[field])} bytes"
-                                    )
                                     content_found = True
                                     break
 
@@ -485,21 +396,10 @@ class ReadwiseClient:
                                         largest_field = field
 
                                 if (
-                                    largest_field and largest_size > 100
+                                    largest_field and largest_size > 100  # noqa: PLR2004
                                 ):  # Only use if reasonably large
                                     article["content"] = first_result[largest_field]
-                                    logger.debug(
-                                        f"Using largest field '{largest_field}' as content: {largest_size} bytes"
-                                    )
                                     content_found = True
-
-                    # Log the result
-                    if article.get("html_content"):
-                        logger.debug(
-                            f"Final html_content size: {len(article['html_content'])}"
-                        )
-                    if article.get("content"):
-                        logger.debug(f"Final content size: {len(article['content'])}")
 
                     # If we still don't have content, try a desperate measure: raw content from document
                     if (
@@ -509,29 +409,15 @@ class ReadwiseClient:
                         and document.content
                     ):
                         article["content"] = document.content
-                        logger.debug(
-                            f"Using document.content as fallback: {len(document.content)} bytes"
-                        )
 
                 except Exception as e:
                     logger.error(f"Error fetching HTML content: {e}")
                     # Try to use any content from the original document as fallback
                     if hasattr(document, "content") and document.content:
                         article["content"] = document.content
-                        logger.debug(
-                            f"Using document.content after error: {len(document.content)} bytes"
-                        )
 
                 # Store in cache
                 self._article_cache[article_id] = article
-
-                logger.debug(
-                    f"Final article has html_content: {bool(article.get('html_content'))}"
-                )
-                logger.debug(
-                    f"Final article has content: {bool(article.get('content'))}"
-                )
-                logger.debug(f"Successfully processed article {article_id}")
                 return article
             else:
                 logger.warning(f"No article found with ID {article_id}")
@@ -570,8 +456,6 @@ class ReadwiseClient:
             )
 
             if success:
-                logger.debug(f"Successfully moved article {article_id} to inbox")
-
                 # Update cache
                 if article_id in self._article_cache:
                     self._article_cache[article_id]["archived"] = False
@@ -609,8 +493,6 @@ class ReadwiseClient:
             )
 
             if success:
-                logger.debug(f"Successfully moved article {article_id} to later")
-
                 # Update cache
                 if article_id in self._article_cache:
                     self._article_cache[article_id]["archived"] = False
@@ -648,8 +530,6 @@ class ReadwiseClient:
             )
 
             if success:
-                logger.debug(f"Successfully moved article {article_id} to archive")
-
                 # Update cache
                 if article_id in self._article_cache:
                     self._article_cache[article_id]["archived"] = True
@@ -685,8 +565,6 @@ class ReadwiseClient:
             success, response = readwise.delete_document(document_id=article_id)
 
             if success:
-                logger.debug(f"Successfully deleted article {article_id}")
-
                 # Remove from cache
                 if article_id in self._article_cache:
                     del self._article_cache[article_id]
@@ -699,49 +577,6 @@ class ReadwiseClient:
 
         except Exception as e:
             logger.error(f"Error deleting article {article_id}: {e}")
-            return False
-
-    def toggle_read(self, article_id: str, read: bool) -> bool:
-        """Toggle read/unread status of an article.
-
-        Args:
-            article_id: ID of the article to update
-            read: True to mark as read, False for unread
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Use the v3 API to update reading state
-            url = "https://readwise.io/api/v3/update/"
-            data = {"id": article_id, "state": "finished" if read else "reading"}
-
-            response = requests.post(
-                url=url,
-                headers={"Authorization": f"Token {self.token}"},
-                json=data,
-                timeout=self._timeout,
-            )
-
-            if response.status_code == 200:
-                logger.debug(f"Successfully updated read status for {article_id}")
-
-                # Update article in cache
-                if article_id in self._article_cache:
-                    self._article_cache[article_id]["read"] = read
-                    self._article_cache[article_id]["state"] = (
-                        "finished" if read else "reading"
-                    )
-
-                return True
-            else:
-                logger.error(
-                    f"Failed to update read status for {article_id}: {response.status_code} {response.text}"
-                )
-                return False
-
-        except Exception as e:
-            logger.error(f"Error updating read status for {article_id}: {e}")
             return False
 
     def get_more_articles(self, category: str) -> list[dict[str, Any]]:
@@ -771,9 +606,6 @@ class ReadwiseClient:
 
             # Reload with new timeframe if different
             if new_timeframe != current_timeframe:
-                logger.debug(
-                    f"Expanding archive timeframe from {current_timeframe} to {new_timeframe}"
-                )
                 return self.get_archive(refresh=True, timeframe=new_timeframe)
             else:
                 # If already using longest timeframe, just refresh
@@ -814,11 +646,8 @@ class ReadwiseClient:
             if category == "archive" and timeframe:
                 self._category_cache[category]["timeframe"] = timeframe
 
-            logger.debug(f"Invalidated cache for {category}")
-
     def _invalidate_cache(self) -> None:
         """Invalidate all caches."""
-        logger.debug("Invalidating all caches")
         for category in self._category_cache:
             self._invalidate_cache_for_category(category)
 
@@ -826,12 +655,10 @@ class ReadwiseClient:
         """Clear the entire cache."""
         self._invalidate_cache()
         self._article_cache = {}
-        logger.debug("Cleared entire cache")
 
     def close(self) -> None:
         """Close the client and clean up resources."""
         try:
             self._executor.shutdown(wait=False)
-            logger.debug("Closed client and thread executor")
         except Exception as e:
             logger.error(f"Error shutting down executor: {e}")

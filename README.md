@@ -37,7 +37,6 @@ Create a configuration file at `~/.rwreader.toml` with the following content:
 [general]
 cache_size = 10000
 default_theme = "dark"
-auto_mark_read = true
 
 [readwise]
 token = "your_readwise_token"  # Or use 1Password CLI integration

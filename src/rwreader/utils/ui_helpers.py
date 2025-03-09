@@ -49,7 +49,7 @@ def safe_set_text_style(item: Any, style: str) -> None:
             logger.error(f"Error setting fallback text style: {e}")
 
 
-def format_article_content(article: dict[str, Any]) -> str:
+def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
     """Format article data into markdown content with enhanced error handling and fallbacks.
 
     Args:
@@ -72,7 +72,7 @@ def format_article_content(article: dict[str, Any]) -> str:
                     if len(value) > 0:
                         preview = (
                             value[:100].replace("\n", " ") + "..."
-                            if len(value) > 100
+                            if len(value) > 100  # noqa: PLR2004
                             else value
                         )
                         logger.debug(f"Content preview: {preview}")
@@ -135,7 +135,7 @@ def format_article_content(article: dict[str, Any]) -> str:
             largest_field = None
             largest_size = 0
             for field, value in article.items():
-                if isinstance(value, str) and len(value) > 100:
+                if isinstance(value, str) and len(value) > 100:  # noqa: PLR2004
                     if field not in ["id", "title", "url", "author", "site_name"]:
                         if len(value) > largest_size:
                             largest_size = len(value)
@@ -151,7 +151,7 @@ def format_article_content(article: dict[str, Any]) -> str:
         # Last resort: check for raw attribute text
         if not html_content and not content and hasattr(article, "__dict__"):
             for attr_name, attr_value in article.__dict__.items():
-                if isinstance(attr_value, str) and len(attr_value) > 100:
+                if isinstance(attr_value, str) and len(attr_value) > 100:  # noqa: PLR2004
                     if attr_name not in ["id", "title", "url", "author", "site_name"]:
                         content = attr_value
                         content_field_used = f"__dict__.{attr_name}"
@@ -251,7 +251,7 @@ def format_article_content(article: dict[str, Any]) -> str:
 
                     # Check if the content actually contains real text
                     text_content = re.sub(r"[\s\n\r\t]+", " ", content_markdown).strip()
-                    if len(text_content) < 10:  # If barely any readable text
+                    if len(text_content) < 10:  # If barely any readable text  # noqa: PLR2004
                         logger.warning(
                             f"Converted content has almost no text: '{text_content}'"
                         )
@@ -271,7 +271,7 @@ def format_article_content(article: dict[str, Any]) -> str:
                 )
 
             # Final check - if content is still empty or too short, show an error
-            if not content_markdown or len(content_markdown.strip()) < 10:
+            if not content_markdown or len(content_markdown.strip()) < 10:  # noqa: PLR2004
                 logger.warning(f"Final content too short: '{content_markdown}'")
                 content_markdown = (
                     "*The article content appears to be empty or could not be properly retrieved.*\n\n"

@@ -6,9 +6,12 @@
         "earer",
         "listviews",
         "markdownify",
+        "pytest",
         "Readwise",
         "rwreader",
         "tcss",
-        "Unarchived"
+        "ttrsscli",
+        "Unarchived",
+        "venv"
     ]
 }
