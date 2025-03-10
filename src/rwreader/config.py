@@ -49,12 +49,12 @@ def get_conf_value(op_command: str) -> str:
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as err:
-            logger.error(f"Error executing command '{op_command}': {err}")
+            logger.error(msg=f"Error executing command '{op_command}': {err}")
             print(f"Error executing command '{op_command}': {err}")
             sys.exit(1)
         except FileNotFoundError:
             logger.error(
-                "Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
+                msg="Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
             )
             print(
                 "Error: 'op' command not found. Ensure 1Password CLI is installed and accessible."
@@ -136,11 +136,11 @@ class Configuration:
 
         if args.debug:
             logger.setLevel(level=logging.DEBUG)
-            logger.debug("Debug log enabled")
+            logger.debug(msg="Debug log enabled")
 
         if args.info:
             logger.setLevel(level=logging.INFO)
-            logger.info("Info log enabled")
+            logger.info(msg="Info log enabled")
 
         # Handle version argument
         if args.version:
@@ -185,7 +185,7 @@ class Configuration:
                 self.version = "0.1.0"  # Default version if not installed
 
         except KeyError as err:
-            logger.error(f"Error reading configuration: {err}")
+            logger.error(msg=f"Error reading configuration: {err}")
             print(f"Error reading configuration: {err}")
             sys.exit(1)
 
@@ -214,7 +214,7 @@ class Configuration:
 
             return toml.loads(s=config_path.read_text())
         except (FileNotFoundError, toml.TomlDecodeError) as err:
-            logger.error(f"Error reading configuration file: {err}")
+            logger.error(msg=f"Error reading configuration file: {err}")
             print(f"Error reading configuration file: {err}")
             sys.exit(1)
 
@@ -231,7 +231,7 @@ class Configuration:
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
             except Exception as e:
-                logger.error(f"Error creating directory for config file: {e}")
+                logger.error(msg=f"Error creating directory for config file: {e}")
                 print(f"Error creating directory for config file: {e}")
                 sys.exit(1)
 
@@ -239,6 +239,6 @@ class Configuration:
         try:
             path.write_text(data=DEFAULT_CONFIG)
         except Exception as e:
-            logger.error(f"Error writing configuration file: {e}")
+            logger.error(msg=f"Error writing configuration file: {e}")
             print(f"Error writing configuration file: {e}")
             sys.exit(1)

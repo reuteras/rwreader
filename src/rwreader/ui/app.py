@@ -1,10 +1,10 @@
 """Application class for rwreader with progressive loading."""
 
+import asyncio
 import logging
 import re
 import sys
 import webbrowser
-from asyncio import wait_for
 from pathlib import PurePath
 from typing import Any, ClassVar, Final, Literal
 
@@ -254,7 +254,7 @@ class RWReader(App[None]):
                 logger.error(msg=f"Failed to add fallback item: {nested_e}")
 
     async def on_list_view_highlighted(self, message: Any) -> None:
-        """Handle list view item highlighting."""
+        """Handle list view item highlighting with improved performance."""
         highlighted_item: Any = message.item
         if not highlighted_item or not hasattr(highlighted_item, "id"):
             return
@@ -271,22 +271,25 @@ class RWReader(App[None]):
             ):
                 category: Any = highlighted_item.data["category"]
 
-                # Update current category and load articles
-                self.current_category = category
-                await self.load_category(category=category, initial_load=True)
+                # Only switch category if it's different from the current one
+                if category != self.current_category:
+                    self.current_category = category
+                    await self.load_category(category=category, initial_load=True)
 
         # Check if this is an article
         elif highlighted_item.id.startswith("art_") and highlighted_item.id != "header":
             article_id: str = highlighted_item.id.replace("art_", "")
 
-            # Load article content
-            await self.display_article(article_id=article_id)
+            # Only load the article if it's different from the current one
+            if article_id != self.current_article_id:
+                # Load article content
+                await self.display_article(article_id=article_id)
 
         # Check if this is the load more button
         elif highlighted_item.id == "load_more_item":
             await self.action_load_more()
 
-    async def display_article(self, article_id: str) -> None:  # noqa: PLR0915
+    async def display_article(self, article_id: str) -> None:  # noqa: PLR0912, PLR0915
         """Fetch and display article content with improved error handling and timeouts.
 
         Args:
@@ -310,13 +313,14 @@ class RWReader(App[None]):
             # Create a safer version of the article fetching
             article = None
             try:
-                # Define the fetch function
-                async def fetch_article() -> dict[str, Any] | None:
-                    return self.client.get_article(article_id=article_id)
-
-                # Run with timeout
-                article: dict[str, Any] | None = await wait_for(
-                    fut=fetch_article(), timeout=FETCH_TIMEOUT
+                # Run the synchronous get_article in a thread using run_in_executor
+                loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+                article: dict[str, Any] | None = await asyncio.wait_for(
+                    fut=loop.run_in_executor(
+                        executor=None,  # Use default executor
+                        func=lambda: self.client.get_article(article_id=article_id),
+                    ),
+                    timeout=FETCH_TIMEOUT,
                 )
             except TimeoutError:
                 logger.error(
@@ -365,14 +369,16 @@ class RWReader(App[None]):
             try:
                 logger.debug(msg="Calling format_article_content")
 
-                # Limit processing time for formatting
-                async def format_article_safely() -> str:
-                    return format_article_content(article=article)
-
-                # Run with timeout
-                self.content_markdown = await wait_for(
-                    fut=format_article_safely(), timeout=FETCH_TIMEOUT
+                # Run the synchronous format_article_content in a thread
+                loop = asyncio.get_event_loop()
+                self.content_markdown = await asyncio.wait_for(
+                    fut=loop.run_in_executor(
+                        executor=None,  # Use default executor
+                        func=lambda: format_article_content(article=article),
+                    ),
+                    timeout=FETCH_TIMEOUT,
                 )
+
                 logger.debug(
                     msg=f"Formatted content length: {len(self.content_markdown)}"
                 )
@@ -395,7 +401,6 @@ class RWReader(App[None]):
 
             # Display content using LinkableMarkdownViewer - with safety
             try:
-                logger.debug(msg="Creating new markdown viewer")
                 content_view = self.query_one(
                     selector="#content", expect_type=LinkableMarkdownViewer
                 )
@@ -404,14 +409,20 @@ class RWReader(App[None]):
                 # This is safer than the mount/unmount approach
                 content_view.update_content(markdown=self.content_markdown)
 
-                # Update item style without refreshing everything
+                # Update item style without refreshing everything - only update the current item
                 articles_list: ListView = self.query_one(
                     selector="#articles", expect_type=ListView
                 )
+
+                # Use a more efficient approach to find and update the item
+                item_to_update: Widget | None = None
                 for item in articles_list.children:
                     if hasattr(item, "id") and item.id == f"art_{article_id}":
-                        safe_set_text_style(item=item, style="none")
+                        item_to_update = item
                         break
+
+                if item_to_update:
+                    safe_set_text_style(item=item_to_update, style="none")
 
             except Exception as view_error:
                 logger.error(
@@ -445,6 +456,18 @@ class RWReader(App[None]):
                 )
             except Exception:
                 pass  # At this point we can't do much more
+
+    # Add this helper method to use with wait_for
+    async def _format_article_in_background(self, article: dict[str, Any]) -> str:
+        """Format an article in the background to avoid blocking the UI.
+
+        Args:
+            article: The article data to format
+
+        Returns:
+            The formatted markdown content
+        """
+        return format_article_content(article=article)
 
     # Direct navigation actions
     async def action_goto_inbox(self) -> None:
@@ -485,7 +508,7 @@ class RWReader(App[None]):
 
         # Extract HTML links <a href="url">text</a>
         html_pattern = r'<a\s+href="([^"]+)"[^>]*>([^<]+)</a>'
-        for match in re.finditer(html_pattern, content):
+        for match in re.finditer(pattern=html_pattern, string=content):
             url = match.group(1).strip()
             text = match.group(2).strip()
             links.append((text, url))
@@ -500,7 +523,7 @@ class RWReader(App[None]):
         """
         # Simply open the link in a browser
         try:
-            webbrowser.open(link)
+            webbrowser.open(url=link)
             self.notify(message=f"Opening link: {link}", title="Browser")
         except Exception as e:
             logger.error(msg=f"Error opening link: {e}")
@@ -547,7 +570,9 @@ class RWReader(App[None]):
 
         # Extract links from content
         content: str = self.content_markdown
-        links: list[tuple[str, str]] = await self.extract_links_from_content(content)
+        links: list[tuple[str, str]] = await self.extract_links_from_content(
+            content=content
+        )
 
         # If no links found
         if not links:
@@ -579,7 +604,9 @@ class RWReader(App[None]):
 
         # Extract links from content
         content: str = self.content_markdown
-        links: list[tuple[str, str]] = await self.extract_links_from_content(content)
+        links: list[tuple[str, str]] = await self.extract_links_from_content(
+            content=content
+        )
 
         # If no links found
         if not links:
@@ -611,7 +638,9 @@ class RWReader(App[None]):
 
         # Extract links from content
         content: str = self.content_markdown
-        links: list[tuple[str, str]] = await self.extract_links_from_content(content)
+        links: list[tuple[str, str]] = await self.extract_links_from_content(
+            content=content
+        )
 
         # If no links found
         if not links:
@@ -683,7 +712,7 @@ class RWReader(App[None]):
             )
             return
 
-        url = self.current_article.get("url")
+        url: str | None = self.current_article.get("url")
         if not url:
             self.notify(
                 message="No URL available for this article",
@@ -901,7 +930,7 @@ class RWReader(App[None]):
 
         if current_focus and hasattr(current_focus, "action_cursor_down"):
             # For normal listviews and other widgets with cursor_down
-            current_focus.action_cursor_down()
+            current_focus.action_cursor_down()  # type: ignore
         elif current_focus and current_focus.id == "navigation":
             pass
 
@@ -911,7 +940,7 @@ class RWReader(App[None]):
 
         if current_focus and hasattr(current_focus, "action_cursor_up"):
             # For normal listviews and other widgets with cursor_up
-            current_focus.action_cursor_up()
+            current_focus.action_cursor_up()  # type: ignore
         elif current_focus and current_focus.id == "navigation":
             pass
 
@@ -945,7 +974,7 @@ class RWReader(App[None]):
 
             self.notify(message="Cache reset complete", title="Debug")
         except Exception as e:
-            logger.error(f"Error resetting cache: {e}")
+            logger.error(msg=f"Error resetting cache: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
 
     async def load_category(self, category: str, initial_load: bool = False) -> None:  # noqa: PLR0912, PLR0915
@@ -962,6 +991,14 @@ class RWReader(App[None]):
             )
             if initial_load:
                 loading_indicator.display = True
+                # Create a header text for notifications
+                header_text: str = category.capitalize()
+
+                # Create a status widget for persistent status display
+                api_status: APIStatusWidget = self.query_one(
+                    selector="APIStatusWidget", expect_type=APIStatusWidget
+                )
+                api_status.show_info(message=f"Loading {header_text} articles...")
 
             # Update the articles list
             articles_list: ListView = self.query_one(
@@ -983,11 +1020,6 @@ class RWReader(App[None]):
 
                 # Reset the loaded count for this category
                 self.items_loaded[category] = 0
-
-                # Notify user we're loading
-                self.notify(
-                    message=f"Loading {header_text} articles...", title="Loading"
-                )
 
             # Get articles for the selected category with limit for fast initial loading
             articles: list[dict[str, Any]] = []
@@ -1034,11 +1066,18 @@ class RWReader(App[None]):
             )
             load_more.display = len(articles) >= self.initial_page_size
 
-            # Show completed notification
+            # Show completed notification (only once at the end)
             if initial_load:
-                self.notify(
-                    message=f"Loaded {len(articles)} articles", title=f"{header_text}"
+                # Update the status widget instead of creating a new notification
+                api_status = self.query_one(
+                    selector="APIStatusWidget", expect_type=APIStatusWidget
                 )
+                api_status.show_info(
+                    message=f"Loaded {len(articles)} {header_text} articles"
+                )
+
+                # Auto-hide the status after 3 seconds
+                self.set_timer(delay=3, callback=lambda: api_status.hide())
 
                 # Clear the content pane
                 content_view: LinkableMarkdownViewer = self.query_one(
@@ -1063,7 +1102,7 @@ class RWReader(App[None]):
                         and first_item.id is not None
                         and first_item.id.startswith("art_")
                     ):
-                        article_id = first_item.id.replace("art_", "")
+                        article_id: str = first_item.id.replace("art_", "")
                         await self.display_article(article_id=article_id)
         except Exception as e:
             logger.error(msg=f"Error loading category {category}: {e}")
@@ -1164,7 +1203,9 @@ class RWReader(App[None]):
 
                 # Refresh if we're not already in the Archive
                 if self.current_category != "archive":
-                    await self.load_category(self.current_category, initial_load=True)
+                    await self.load_category(
+                        category=self.current_category, initial_load=True
+                    )
 
                 # Update the article display
                 if self.current_article_id:

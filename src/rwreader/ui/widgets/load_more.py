@@ -16,7 +16,7 @@ class LoadMoreWidget(Static):
         border-top: solid $primary;
         display: none;
     }
-    
+
     LoadMoreWidget:focus-within {
         background: $accent;
         color: $text-accent;

@@ -54,7 +54,7 @@ class LinkableMarkdownViewer(MarkdownViewer):
         Returns:
             List of tuples with link text and URL
         """
-        links = []
+        links: list[tuple[str, str]] = []
 
         # Match markdown links of the form [text](url)
         link_pattern = r"\[([^\]]+)\]\(([^)]+)\)"

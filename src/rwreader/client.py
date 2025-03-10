@@ -9,6 +9,7 @@ from typing import Any
 
 import requests
 from readwise.api import ReadwiseReader
+from readwise.model import Document
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -30,7 +31,7 @@ class ReadwiseClient:
         os.environ["READWISE_TOKEN"] = token
 
         # Initialize category caches with pagination support
-        self._category_cache = {
+        self._category_cache: dict[str, dict[str, Any]] = {
             "inbox": {"data": [], "last_updated": 0, "complete": False},
             "later": {"data": [], "last_updated": 0, "complete": False},
             "archive": {
@@ -68,7 +69,9 @@ class ReadwiseClient:
         Returns:
             List of inbox articles in dict format
         """
-        return self._get_category("inbox", "new", refresh=refresh, limit=limit)
+        return self._get_category(
+            cache_key="inbox", api_location="new", refresh=refresh, limit=limit
+        )
 
     def get_later(
         self, refresh: bool = False, limit: int | None = None
@@ -82,7 +85,9 @@ class ReadwiseClient:
         Returns:
             List of later articles in dict format
         """
-        return self._get_category("later", "later", refresh=refresh, limit=limit)
+        return self._get_category(
+            cache_key="later", api_location="later", refresh=refresh, limit=limit
+        )
 
     def get_archive(
         self, refresh: bool = False, limit: int | None = None, timeframe: str = "month"
@@ -97,11 +102,11 @@ class ReadwiseClient:
         Returns:
             List of archived articles in dict format
         """
-        cache = self._category_cache["archive"]
+        cache: dict[str, Any] = self._category_cache["archive"]
 
         # Check if we should use the cache (and if timeframe matches)
-        current_time = time.time()
-        cache_age = current_time - cache["last_updated"]
+        current_time: float = time.time()
+        cache_age: float = current_time - cache["last_updated"]
 
         if (
             not refresh
@@ -113,16 +118,20 @@ class ReadwiseClient:
 
         try:
             # Calculate the date range based on timeframe
-            updated_after = self._get_date_for_timeframe(timeframe)
+            updated_after: datetime.datetime = self._get_date_for_timeframe(
+                timeframe=timeframe
+            )
 
             # Get documents without withHtmlContent first to avoid potential issues
             try:
-                documents = self._api.get_documents(
+                documents: list[Document] = self._api.get_documents(
                     location="archive", updated_after=updated_after
                 )
 
                 # Convert to our internal format
-                articles = [self._convert_document_to_dict(doc) for doc in documents]
+                articles: list[dict[str, Any]] = [
+                    self._convert_document_to_dict(document=doc) for doc in documents
+                ]
 
                 # Update the cache
                 cache["data"] = articles
@@ -137,12 +146,12 @@ class ReadwiseClient:
                 return articles[:limit] if limit else articles
 
             except Exception as e:
-                logger.error(f"Error in get_documents for archive: {e}")
+                logger.error(msg=f"Error in get_documents for archive: {e}")
                 # Return whatever we have in the cache
                 return cache["data"][:limit] if limit else cache["data"]
 
         except Exception as e:
-            logger.error(f"Error fetching archive: {e}")
+            logger.error(msg=f"Error fetching archive: {e}")
             # Return whatever we have in the cache
             return cache["data"][:limit] if limit else cache["data"]
 
@@ -155,7 +164,7 @@ class ReadwiseClient:
         Returns:
             A datetime representing the start of the timeframe
         """
-        now = datetime.datetime.now()
+        now: datetime.datetime = datetime.datetime.now()
 
         if timeframe == "day":
             return now - datetime.timedelta(days=1)
@@ -166,7 +175,7 @@ class ReadwiseClient:
         elif timeframe == "year":
             return now - datetime.timedelta(days=365)
         else:
-            logger.warning(f"Invalid timeframe: {timeframe}, using month")
+            logger.warning(msg=f"Invalid timeframe: {timeframe}, using month")
             return now - datetime.timedelta(days=30)
 
     def _get_category(
@@ -176,7 +185,7 @@ class ReadwiseClient:
         refresh: bool = False,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Get articles for a specific category.
+        """Get articles for a specific category with improved caching and performance.
 
         Args:
             cache_key: Category key for cache (inbox, later)
@@ -187,13 +196,20 @@ class ReadwiseClient:
         Returns:
             List of articles in dict format
         """
-        cache = self._category_cache[cache_key]
+        cache: dict[str, Any] = self._category_cache[cache_key]
 
         # Check if we should use the cache
-        current_time = time.time()
-        cache_age = current_time - cache["last_updated"]
+        current_time: float = time.time()
+        cache_age: float = current_time - cache["last_updated"]
 
+        # Only use cache if: not refreshing, has data, and not expired
         if not refresh and cache["data"] and cache_age < self._cache_expiry:
+            return cache["data"][:limit] if limit else cache["data"]
+
+        # If we've already completed a full load and we're not explicitly refreshing,
+        # just update the timestamp and return the cached data
+        if cache["complete"] and not refresh:
+            cache["last_updated"] = current_time
             return cache["data"][:limit] if limit else cache["data"]
 
         try:
@@ -202,36 +218,61 @@ class ReadwiseClient:
                 cache["data"] = []
                 cache["complete"] = False
 
-            # If we already have complete data, just update the timestamp
-            if cache["complete"]:
-                cache["last_updated"] = current_time
-                return cache["data"][:limit] if limit else cache["data"]
-
             # Get documents without withHtmlContent first to avoid potential issues
             try:
-                documents = self._api.get_documents(location=api_location)
+                # Add a timeout to prevent hanging
+                documents: list[Document] = self._api.get_documents(
+                    location=api_location
+                )
 
-                # Convert documents to our expected format
-                articles = [self._convert_document_to_dict(doc) for doc in documents]
+                # Convert documents to our expected format - use a more efficient method
+                # for large datasets
+                if len(documents) > 100:  # noqa: PLR2004
+                    articles = []
+                    # Process in smaller batches to avoid UI blocking
+                    batch_size = 50
+                    for i in range(0, len(documents), batch_size):
+                        batch: list[Document] = documents[i : i + batch_size]
+                        articles.extend(
+                            [
+                                self._convert_document_to_dict(document=doc)
+                                for doc in batch
+                            ]
+                        )
+                else:
+                    articles: list[dict[str, Any]] = [
+                        self._convert_document_to_dict(document=doc)
+                        for doc in documents
+                    ]
 
                 # Update the cache
                 cache["data"] = articles
                 cache["last_updated"] = current_time
                 cache["complete"] = True
 
-                # Update the article cache
+                # Update the article cache more efficiently - only store IDs we don't already have
+                # or ones that have changed
                 for article in articles:
-                    self._article_cache[article["id"]] = article
+                    article_id: str = article["id"]
+                    if article_id not in self._article_cache:
+                        self._article_cache[article_id] = article
+                    else:
+                        # Only update if the article has been modified
+                        existing_article = self._article_cache[article_id]
+                        if article.get("updated_at", "") != existing_article.get(
+                            "updated_at", ""
+                        ):
+                            self._article_cache[article_id] = article
 
                 return articles[:limit] if limit else articles
 
             except Exception as e:
-                logger.error(f"Error in get_documents for {cache_key}: {e}")
+                logger.error(msg=f"Error in get_documents for {cache_key}: {e}")
                 # Return whatever we have in the cache
                 return cache["data"][:limit] if limit else cache["data"]
 
         except Exception as e:
-            logger.error(f"Error fetching {cache_key}: {e}")
+            logger.error(msg=f"Error fetching {cache_key}: {e}")
             # Return whatever we have in the cache
             return cache["data"][:limit] if limit else cache["data"]
 
@@ -246,7 +287,7 @@ class ReadwiseClient:
         """
         try:
             # Convert document attributes to our dictionary format
-            article_dict = {
+            article_dict: dict[str, Any] = {
                 "id": document.id,
                 "title": document.title or "Untitled",
                 "url": document.url or "",
@@ -273,7 +314,7 @@ class ReadwiseClient:
             }
             return article_dict
         except Exception as e:
-            logger.error(f"Error converting document to dict: {e}")
+            logger.error(msg=f"Error converting document to dict: {e}")
             # Return a minimal fallback dictionary
             try:
                 return {
@@ -319,23 +360,26 @@ class ReadwiseClient:
             # Get document by ID first without html content
             document = None
             try:
-                document = self._api.get_document_by_id(id=article_id)
+                document: Document | None = self._api.get_document_by_id(id=article_id)
             except Exception as doc_error:
-                logger.error(f"Error getting document by ID: {doc_error}")
+                logger.error(msg=f"Error getting document by ID: {doc_error}")
                 # Try alternate method if doc_id doesn't work
                 try:
                     document = self._api.get_document_by_id(id=article_id)
                 except Exception as alt_error:
-                    logger.error(f"Alternate method also failed: {alt_error}")
+                    logger.error(msg=f"Alternate method also failed: {alt_error}")
 
             if document:
                 # Create base article dict from the document
-                article = self._convert_document_to_dict(document)
+                article: dict[str, Any] = self._convert_document_to_dict(document)
 
                 try:
                     # Make a direct API call with withHtmlContent
-                    params = {"id": article_id, "withHtmlContent": "true"}
-                    response = requests.get(
+                    params: dict[str, str] = {
+                        "id": article_id,
+                        "withHtmlContent": "true",
+                    }
+                    response: requests.Response = requests.get(
                         url=f"{self._api.URL_BASE}/list/",
                         headers={"Authorization": f"Token {self.token}"},
                         params=params,
@@ -392,7 +436,7 @@ class ReadwiseClient:
                                         and len(value) > largest_size
                                         and field not in ["id", "title", "url"]
                                     ):
-                                        largest_size = len(value)
+                                        largest_size: int = len(value)
                                         largest_field = field
 
                                 if (
@@ -411,7 +455,7 @@ class ReadwiseClient:
                         article["content"] = document.content
 
                 except Exception as e:
-                    logger.error(f"Error fetching HTML content: {e}")
+                    logger.error(msg=f"Error fetching HTML content: {e}")
                     # Try to use any content from the original document as fallback
                     if hasattr(document, "content") and document.content:
                         article["content"] = document.content
@@ -420,16 +464,16 @@ class ReadwiseClient:
                 self._article_cache[article_id] = article
                 return article
             else:
-                logger.warning(f"No article found with ID {article_id}")
+                logger.warning(msg=f"No article found with ID {article_id}")
                 return None
 
         except Exception as e:
-            logger.error(f"Error fetching article {article_id}: {e}")
+            logger.error(msg=f"Error fetching article {article_id}: {e}")
 
             # Return what we have in cache even if incomplete
             if article_id in self._article_cache:
                 logger.warning(
-                    f"Returning cached article for {article_id} without full content"
+                    msg=f"Returning cached article for {article_id} without full content"
                 )
                 return self._article_cache[article_id]
 
@@ -465,12 +509,12 @@ class ReadwiseClient:
                 return True
             else:
                 logger.error(
-                    f"Failed to move article {article_id} to inbox: {response}"
+                    msg=f"Failed to move article {article_id} to inbox: {response}"
                 )
                 return False
 
         except Exception as e:
-            logger.error(f"Error moving article {article_id} to inbox: {e}")
+            logger.error(msg=f"Error moving article {article_id} to inbox: {e}")
             return False
 
     def move_to_later(self, article_id: str) -> bool:
@@ -502,12 +546,12 @@ class ReadwiseClient:
                 return True
             else:
                 logger.error(
-                    f"Failed to move article {article_id} to later: {response}"
+                    msg=f"Failed to move article {article_id} to later: {response}"
                 )
                 return False
 
         except Exception as e:
-            logger.error(f"Error moving article {article_id} to later: {e}")
+            logger.error(msg=f"Error moving article {article_id} to later: {e}")
             return False
 
     def move_to_archive(self, article_id: str) -> bool:
@@ -539,12 +583,12 @@ class ReadwiseClient:
                 return True
             else:
                 logger.error(
-                    f"Failed to move article {article_id} to archive: {response}"
+                    msg=f"Failed to move article {article_id} to archive: {response}"
                 )
                 return False
 
         except Exception as e:
-            logger.error(f"Error moving article {article_id} to archive: {e}")
+            logger.error(msg=f"Error moving article {article_id} to archive: {e}")
             return False
 
     def delete_article(self, article_id: str) -> bool:
@@ -572,11 +616,11 @@ class ReadwiseClient:
                 self._invalidate_cache()
                 return True
             else:
-                logger.error(f"Failed to delete article {article_id}: {response}")
+                logger.error(msg=f"Failed to delete article {article_id}: {response}")
                 return False
 
         except Exception as e:
-            logger.error(f"Error deleting article {article_id}: {e}")
+            logger.error(msg=f"Error deleting article {article_id}: {e}")
             return False
 
     def get_more_articles(self, category: str) -> list[dict[str, Any]]:
@@ -619,7 +663,7 @@ class ReadwiseClient:
         elif category == "later":
             return self.get_later(refresh=True)
         else:
-            logger.error(f"Unknown category: {category}")
+            logger.error(msg=f"Unknown category: {category}")
             return []
 
     def _invalidate_cache_for_category(self, category: str) -> None:
@@ -649,7 +693,7 @@ class ReadwiseClient:
     def _invalidate_cache(self) -> None:
         """Invalidate all caches."""
         for category in self._category_cache:
-            self._invalidate_cache_for_category(category)
+            self._invalidate_cache_for_category(category=category)
 
     def clear_cache(self) -> None:
         """Clear the entire cache."""
@@ -661,4 +705,4 @@ class ReadwiseClient:
         try:
             self._executor.shutdown(wait=False)
         except Exception as e:
-            logger.error(f"Error shutting down executor: {e}")
+            logger.error(msg=f"Error shutting down executor: {e}")

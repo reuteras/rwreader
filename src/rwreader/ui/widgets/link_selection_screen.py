@@ -232,9 +232,8 @@ class LinkSelectionScreen(ModalScreen):
             loading.display = True
 
             # Save the document
-            # TODO:success, response = self.client.save_document(url=url)
-            success: bool = False
-            response: Any = None
+            success, response = self.client.save_document(url=url)
+
             # Hide loading indicator
             loading.display = False
 

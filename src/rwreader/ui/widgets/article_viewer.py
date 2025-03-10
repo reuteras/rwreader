@@ -36,20 +36,20 @@ class ArticleViewer(MarkdownViewer):
             if not markdown:
                 markdown = "# Content Not Available\n\nThe article content could not be loaded."
 
-            self.document.update(markdown)
+            self.document.update(markdown=markdown)
         except Exception as e:
-            logger.error(f"Error updating article content: {e}")
+            logger.error(msg=f"Error updating article content: {e}")
             # Attempt to set a simple error message as fallback
             try:
                 self.document.update(
-                    "**Error loading content**\n\nPlease try again or check logs."
+                    markdown="**Error loading content**\n\nPlease try again or check logs."
                 )
             except Exception as nested_e:
                 logger.error(
-                    f"Failed to set error message in article viewer: {nested_e}"
+                    msg=f"Failed to set error message in article viewer: {nested_e}"
                 )
 
-    @on(Markdown.LinkClicked)
+    @on(message_type=Markdown.LinkClicked)
     def handle_link_click(self, event: Markdown.LinkClicked) -> None:
         """Open links in the default web browser.
 
@@ -62,7 +62,7 @@ class ArticleViewer(MarkdownViewer):
                 webbrowser.open(url=event.href)
                 self.app.notify(message=f"Opening: {event.href}", title="Browser")
             except Exception as e:
-                logger.error(f"Error opening link: {e}")
+                logger.error(msg=f"Error opening link: {e}")
                 self.app.notify(
                     message=f"Error opening link: {e}", title="Error", severity="error"
                 )

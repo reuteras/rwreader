@@ -43,18 +43,18 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
 
         # Replace images with text descriptions
         for img in soup.find_all(name="img"):
-            if img.get("src"):
+            if img.get("src"):  # type: ignore
                 # Create a text placeholder for images
-                img_alt = img.get("alt", "No description")
-                img_placeholder = f"[Image: {img_alt}]"
+                img_alt = img.get("alt", "No description")  # type: ignore
+                img_placeholder: str = f"[Image: {img_alt}]"
                 img.replace_with(soup.new_string(img_placeholder))
 
         # Clean up code blocks for proper rendering
         for pre in soup.find_all(name="pre"):
             # Extract the code language if available
-            code_tag = pre.find("code")
-            if code_tag and code_tag.get("class"):
-                classes = code_tag.get("class")
+            code_tag: str = pre.find("code")  # type: ignore
+            if code_tag and code_tag.get("class"):  # type: ignore
+                classes: str = code_tag.get("class")  # type: ignore
                 language = ""
                 if classes:
                     for cls in classes:
@@ -64,15 +64,15 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
 
                 if language:
                     # Mark the code block with language
-                    code_content: str = code_tag.get_text()
+                    code_content: str = code_tag.get_text()  # type: ignore
                     pre.replace_with(
-                        soup.new_string(f"```{language}\n{code_content}\n```")
+                        soup.new_string(s=f"```{language}\n{code_content}\n```")
                     )
 
         # Convert to markdown using markdownify
         # Fallback to simple string extraction if markdownify fails
         try:
-            markdown_text = md(str(soup))
+            markdown_text = md(html=str(object=soup))
         except Exception as conv_error:
             logger.error(
                 msg=f"Markdownify error: {conv_error}, falling back to basic text extraction"
@@ -102,7 +102,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
         return markdown_text
 
     except Exception as e:
-        logger.error(f"Error converting HTML to markdown: {e}", exc_info=True)
+        logger.error(msg=f"Error converting HTML to markdown: {e}", exc_info=True)
         # Try a very basic fallback if BeautifulSoup fails
         try:
             # First attempt: Just remove HTML tags with regex and return as plain text
@@ -177,23 +177,18 @@ def extract_links(content: str) -> list[tuple[str, str]]:
     Returns:
         List of tuples with link title and URL
     """
-    links = []
+    links: list[tuple[str, str]] = []
     if not content:
         return links
 
     try:
-        # Determine if content is HTML (look for HTML tags)
-        is_html = bool(
-            re.search(pattern=r"<[a-z][^>]*>", string=content, flags=re.IGNORECASE)
-        )
-
         # Parse with BeautifulSoup
         soup = BeautifulSoup(markup=content, features="html.parser")
 
         # Find all links
         for link in soup.find_all(name="a"):
             try:
-                href: str | None = link.get("href", "")
+                href: str = str(link.get("href", ""))  # type: ignore
                 if href:
                     text: str = link.get_text().strip()
                     if not text:
@@ -201,14 +196,6 @@ def extract_links(content: str) -> list[tuple[str, str]]:
                     links.append((text, href))
             except Exception as e:
                 logger.debug(msg=f"Error processing link: {e}")
-
-        # If no links found and not HTML, try to extract markdown links
-        if not links and not is_html:
-            # Extract markdown links with regex: [text](url)
-            md_links: list[str] = re.findall(
-                pattern=r"\[([^\]]+)\]\(([^)]+)\)", string=content
-            )
-            links.extend(md_links)
 
         return links
     except Exception as e:
