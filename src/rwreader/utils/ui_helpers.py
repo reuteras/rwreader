@@ -265,24 +265,12 @@ def safe_get_article_display_title(article: dict[str, Any]) -> str:
     try:
         title: str = article.get("title", "Untitled")
         site_name: str = article.get("site_name", "")
-        reading_progress: str | int = article.get("reading_progress", 0)
-        is_read: bool = article.get("read", False) or article.get("state") == "finished"
 
         # Format the title with metadata
         display_title: str = title
 
         if site_name:
             display_title += f" ({site_name})"
-
-        # Add reading progress or read status
-        if (
-            reading_progress
-            and isinstance(reading_progress, (int | float))
-            and 0 < reading_progress < 100  # noqa: PLR2004
-        ):
-            display_title += f" - {reading_progress}%"
-        elif is_read:
-            display_title += " - Read"
 
         return display_title
     except Exception as e:

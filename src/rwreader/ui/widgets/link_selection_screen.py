@@ -65,7 +65,7 @@ class LinkSelectionScreen(ModalScreen):
         else:
             title = "Select a link"
 
-        yield Static(content=f"# {title}\n\nPress [ESC] to go back", id="link-title")
+        yield Static(content=f"# {title}\n\nPress ESC to go back", id="link-title")
 
         # Handle empty links list
         if not self.links:
