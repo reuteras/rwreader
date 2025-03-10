@@ -452,21 +452,18 @@ class RWReader(App[None]):
         await self._select_nav_item(item_id="nav_inbox")
         self.current_category = "inbox"
         await self.load_category(category="inbox", initial_load=True)
-        self.notify(message="Navigated to Inbox", title="Navigation")
 
     async def action_goto_later(self) -> None:
         """Navigate directly to the Later category."""
         await self._select_nav_item(item_id="nav_later")
         self.current_category = "later"
         await self.load_category(category="later", initial_load=True)
-        self.notify(message="Navigated to Later", title="Navigation")
 
     async def action_goto_archive(self) -> None:
         """Navigate directly to the Archive category."""
         await self._select_nav_item(item_id="nav_archive")
         self.current_category = "archive"
         await self.load_category(category="archive", initial_load=True)
-        self.notify(message="Navigated to Archive", title="Navigation")
 
     async def extract_links_from_content(self, content: str) -> list[tuple[str, str]]:
         """Extract links from article content.
