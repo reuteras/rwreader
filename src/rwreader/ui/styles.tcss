@@ -132,3 +132,10 @@ ListView > ListItem#load_more_item.--highlight {
     background: $accent;
     color: $text-accent;
 }
+
+Markdown {
+    /* Set a max-width in columns (characters) */
+    max-width: 120;
+    /* This ensures content wraps at the max-width */
+    overflow-x: hidden;
+}
