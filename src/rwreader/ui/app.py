@@ -20,11 +20,10 @@ from textual.widgets import (
     ListView,
     LoadingIndicator,
     Static,
-    Tree,
 )
 
 # Import our improved client
-from ..client import ReadwiseClient
+from ..client import ReadwiseClient, create_readwise_client
 from ..config import Configuration
 from ..utils.ui_helpers import (
     format_article_content,
@@ -51,6 +50,7 @@ class RWReader(App[None]):
         ("tab", "focus_next_pane", "Next pane"),
         ("shift+tab", "focus_previous_pane", "Previous pane"),
         # Direct navigation to categories
+        ("F", "goto_feed", "Go to Feed"),
         ("I", "goto_inbox", "Go to Inbox"),
         ("L", "goto_later", "Go to Later"),
         ("A", "goto_archive", "Go to Archive"),
@@ -98,12 +98,6 @@ class RWReader(App[None]):
                 else "textual-light"
             )
 
-            # Connect to Readwise API
-            self.client = ReadwiseClient(
-                token=self.configuration.token,
-                cache_size=self.configuration.cache_size,
-            )
-
             # State variables
             self.current_article_id: str | None = None
             self.current_article: dict[str, Any] | None = None
@@ -116,6 +110,7 @@ class RWReader(App[None]):
             self.is_loading: bool = False
             self.initial_page_size: int = 20  # Number of items to load initially
             self.items_loaded: dict[str, int] = {
+                "feed": 0,
                 "inbox": 0,
                 "later": 0,
                 "archive": 0,
@@ -125,6 +120,18 @@ class RWReader(App[None]):
             logger.error(msg=f"Initialization error: {e}")
             print(f"Error: {e}")
             sys.exit(1)
+
+    async def on_ready(self) -> None:
+        """Connect to the Readwise API and load initial data."""
+        self.client: ReadwiseClient = await create_readwise_client(
+            token=self.configuration.token
+        )
+
+        # Highlight the Inbox item by default
+        await self._select_nav_item(item_id="nav_inbox")
+
+        # Load initial articles
+        await self.load_category(category="inbox", initial_load=True)
 
     def compose(self) -> ComposeResult:
         """Compose the three-pane layout with progressive loading support."""
@@ -160,6 +167,7 @@ class RWReader(App[None]):
         # Add category items with data attributes - disable markup
         inbox_item = ListItem(Static(content="Inbox", markup=False), id="nav_inbox")
         inbox_item.data = {"category": "inbox"}  # type: ignore
+
         later_item = ListItem(Static(content="Later", markup=False), id="nav_later")
         later_item.data = {"category": "later"}  # type: ignore
 
@@ -168,10 +176,14 @@ class RWReader(App[None]):
         )
         archive_item.data = {"category": "archive"}  # type: ignore
 
+        feed_item = ListItem(Static(content="Feed", markup=False), id="nav_feed")
+        feed_item.data = {"category": "feed"}  # type: ignore
+
         # Add items to the list
         nav_list.append(item=inbox_item)
         nav_list.append(item=later_item)
         nav_list.append(item=archive_item)
+        nav_list.append(item=feed_item)
 
         # Hide loading indicator initially
         loading_indicator: LoadingIndicator = self.query_one(
@@ -188,12 +200,6 @@ class RWReader(App[None]):
         # Focus on the navigation list
         nav_list.focus()
 
-        # Highlight the Inbox item by default
-        await self._select_nav_item(item_id="nav_inbox")
-
-        # Load initial articles
-        await self.load_category(category="inbox", initial_load=True)
-
     async def _select_nav_item(self, item_id: str) -> None:
         """Select a navigation item by ID.
 
@@ -207,15 +213,6 @@ class RWReader(App[None]):
             if hasattr(item, "id") and item.id == item_id:
                 nav_list.index = index
                 break
-
-    async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Handle tree node selection."""
-        if event.node.data and "category" in event.node.data:
-            category: str = event.node.data["category"]
-
-            # Update current category and load articles
-            self.current_category = category
-            await self.load_category(category=category, initial_load=True)
 
     async def add_article_to_list(
         self, article: dict[str, Any], list_view: ListView
@@ -457,19 +454,12 @@ class RWReader(App[None]):
             except Exception:
                 pass  # At this point we can't do much more
 
-    # Add this helper method to use with wait_for
-    async def _format_article_in_background(self, article: dict[str, Any]) -> str:
-        """Format an article in the background to avoid blocking the UI.
+    async def action_goto_feed(self) -> None:
+        """Navigate directly to the Feed category."""
+        await self._select_nav_item(item_id="nav_feed")
+        self.current_category = "feed"
+        await self.load_category(category="feed", initial_load=True)
 
-        Args:
-            article: The article data to format
-
-        Returns:
-            The formatted markdown content
-        """
-        return format_article_content(article=article)
-
-    # Direct navigation actions
     async def action_goto_inbox(self) -> None:
         """Navigate directly to the Inbox category."""
         await self._select_nav_item(item_id="nav_inbox")
@@ -680,22 +670,21 @@ class RWReader(App[None]):
             article_id: str = self.current_article_id
             try:
                 # Delete the article
-                if self.client.delete_article(article_id=article_id):
-                    self.notify(message="Article deleted successfully", title="Success")
+                self.client.delete_article(article_id=article_id)
+                self.notify(message="Article deleted successfully", title="Success")
 
-                    # Refresh the article list
-                    await self.load_category(
-                        category=self.current_category, initial_load=True
-                    )
+                list_view: ListView = self.query_one(
+                    selector="#articles", expect_type=ListView
+                )
 
-                    # Clear the content view
-                    self.action_clear()
-                else:
-                    self.notify(
-                        message="Failed to delete article",
-                        title="Error",
-                        severity="error",
-                    )
+                # Remove the article from the list
+                for _, item in enumerate(iterable=list_view.children):
+                    if hasattr(item, "id") and item.id == f"art_{article_id}":
+                        await item.remove()
+                        break
+
+                # Clear the content view
+                self.action_clear()
             except Exception as e:
                 logger.error(msg=f"Error deleting article: {e}")
                 self.notify(
@@ -764,13 +753,22 @@ class RWReader(App[None]):
                 )
 
             # Determine category
-            category: Literal["Archive"] | Literal["Later"] | Literal["Inbox"] = (
+            category: (
+                Literal["Archive"]
+                | Literal["Feed"]
+                | Literal["Later"]
+                | Literal["Inbox"]
+            ) = (
                 "Archive"
-                if self.current_article.get("archived", True)
+                if self.current_article.get("location", "") == "archive"
                 else (
                     "Later"
-                    if self.current_article.get("saved_for_later", False)
-                    else "Inbox"
+                    if self.current_article.get("location", "") == "later"
+                    else (
+                        "Feed"
+                        if self.current_article.get("location", "") == "feed"
+                        else ("Inbox")
+                    )
                 )
             )
             metadata.append(f"Category: {category}")
@@ -781,6 +779,7 @@ class RWReader(App[None]):
 
             # Show metadata in a notification
             metadata_text: str = "\n".join(metadata)
+
             self.notify(
                 title="Article Metadata",
                 message=metadata_text,
@@ -957,26 +956,6 @@ class RWReader(App[None]):
         else:
             self.push_screen(screen=HelpScreen())
 
-    async def action_debug_reset_cache(self) -> None:
-        """Reset cache and reload everything."""
-        try:
-            self.notify(message="Resetting cache...", title="Debug")
-
-            # Clear the client cache
-            self.client.clear_cache()
-
-            # Clear the current selection
-            self.current_article = None
-            self.current_article_id = None
-
-            # Reload current category
-            await self.load_category(category=self.current_category, initial_load=True)
-
-            self.notify(message="Cache reset complete", title="Debug")
-        except Exception as e:
-            logger.error(msg=f"Error resetting cache: {e}")
-            self.notify(message=f"Error: {e}", title="Error", severity="error")
-
     async def load_category(self, category: str, initial_load: bool = False) -> None:  # noqa: PLR0912, PLR0915
         """Load articles for the given category."""
         try:
@@ -1027,6 +1006,14 @@ class RWReader(App[None]):
 
             if category == "inbox":
                 articles = self.client.get_inbox(refresh=initial_load, limit=page_size)
+            elif category == "feed":
+                articles = [
+                    article
+                    for article in self.client.get_feed(
+                        refresh=initial_load, limit=page_size
+                    )
+                    if article.get("first_opened_at") == ""
+                ]
             elif category == "later":
                 articles = self.client.get_later(refresh=initial_load, limit=page_size)
             elif category == "archive":
