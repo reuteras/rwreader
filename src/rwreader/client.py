@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+import readwise
 import requests
 from readwise.api import ReadwiseReader
 from readwise.model import Document
@@ -14,10 +15,22 @@ from readwise.model import Document
 logger: logging.Logger = logging.getLogger(name=__name__)
 
 
+async def create_readwise_client(token: str) -> "ReadwiseClient":
+    """Create a ReadwiseClient instance asynchronously.
+
+    Args:
+        token: Readwise API token
+
+    Returns:
+        ReadwiseClient instance
+    """
+    return ReadwiseClient(token=token)
+
+
 class ReadwiseClient:
     """Client for interacting with the Readwise Reader API with efficient caching."""
 
-    def __init__(self, token: str, cache_size: int = 1000) -> None:
+    def __init__(self, token: str) -> None:
         """Initialize the Readwise Reader client.
 
         Args:
@@ -25,7 +38,7 @@ class ReadwiseClient:
             cache_size: Maximum number of items to store in cache
         """
         # Store token for API calls
-        self.token = token
+        self.token: str = token
 
         # Set token environment variable (required by readwise-api)
         os.environ["READWISE_TOKEN"] = token
@@ -33,6 +46,7 @@ class ReadwiseClient:
         # Initialize category caches with pagination support
         self._category_cache: dict[str, dict[str, Any]] = {
             "inbox": {"data": [], "last_updated": 0, "complete": False},
+            "feed": {"data": [], "last_updated": 0, "complete": False},
             "later": {"data": [], "last_updated": 0, "complete": False},
             "archive": {
                 "data": [],
@@ -71,6 +85,22 @@ class ReadwiseClient:
         """
         return self._get_category(
             cache_key="inbox", api_location="new", refresh=refresh, limit=limit
+        )
+
+    def get_feed(
+        self, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get articles in the Feed.
+
+        Args:
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
+
+        Returns:
+            List of feed articles in dict format
+        """
+        return self._get_category(
+            cache_key="feed", api_location="feed", refresh=refresh, limit=limit
         )
 
     def get_later(
@@ -188,8 +218,8 @@ class ReadwiseClient:
         """Get articles for a specific category with improved caching and performance.
 
         Args:
-            cache_key: Category key for cache (inbox, later)
-            api_location: Location value for readwise-api (new, later)
+            cache_key: Category key for cache (inbox, feed, later)
+            api_location: Location value for readwise-api (new, feed, later)
             refresh: Force refresh even if cached data exists
             limit: Maximum number of items to return
 
@@ -300,7 +330,8 @@ class ReadwiseClient:
                 "summary": document.summary or "",
                 "content": document.content or "",  # Basic content
                 "source_url": document.source_url or "",
-                # Map location to our internal category system
+                "first_opened_at": document.first_opened_at or "",
+                "last_opened_at": document.last_opened_at or "",
                 "archived": document.location == "archive",
                 "saved_for_later": document.location == "later",
                 # Add additional fields for compatibility with the existing code
@@ -489,11 +520,6 @@ class ReadwiseClient:
             True if successful, False otherwise
         """
         try:
-            # Import readwise module to use the update_document_location function
-            # This assumes the function has been added to the readwise-api
-            import readwise
-
-            # Call the update_document_location function
             success, response = readwise.update_document_location(
                 document_id=article_id,
                 location="new",  # 'new' is the v3 API name for inbox
@@ -527,10 +553,6 @@ class ReadwiseClient:
             True if successful, False otherwise
         """
         try:
-            # Import readwise module to use the update_document_location function
-            # This assumes the function has been added to the readwise-api
-            import readwise
-
             # Call the update_document_location function
             success, response = readwise.update_document_location(
                 document_id=article_id, location="later"
@@ -564,10 +586,6 @@ class ReadwiseClient:
             True if successful, False otherwise
         """
         try:
-            # Import readwise module to use the update_document_location function
-            # This assumes the function has been added to the readwise-api
-            import readwise
-
             # Call the update_document_location function
             success, response = readwise.update_document_location(
                 document_id=article_id, location="archive"
@@ -601,23 +619,12 @@ class ReadwiseClient:
             True if successful, False otherwise
         """
         try:
-            # Import readwise module to use the delete_document function
-            # This assumes the function has been added to the readwise-api
-            import readwise
-
             # Call the delete_document function
-            success, response = readwise.delete_document(document_id=article_id)
+            readwise.delete_document(document_id=article_id)
 
-            if success:
-                # Remove from cache
-                if article_id in self._article_cache:
-                    del self._article_cache[article_id]
-
-                self._invalidate_cache()
-                return True
-            else:
-                logger.error(msg=f"Failed to delete article {article_id}: {response}")
-                return False
+            # if article_id in self._article_cache:
+            #    del self._article_cache[article_id]
+            return True
 
         except Exception as e:
             logger.error(msg=f"Error deleting article {article_id}: {e}")
@@ -660,6 +667,8 @@ class ReadwiseClient:
 
         if category == "inbox":
             return self.get_inbox(refresh=True)
+        elif category == "feed":
+            return self.get_feed(refresh=True)
         elif category == "later":
             return self.get_later(refresh=True)
         else:
