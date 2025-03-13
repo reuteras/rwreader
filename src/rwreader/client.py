@@ -59,8 +59,8 @@ class ReadwiseClient:
         # Cache for individual articles
         self._article_cache = {}
 
-        # Cache expiry time (5 minutes)
-        self._cache_expiry = 300
+        # Cache expiry time (1 hour)
+        self._cache_expiry = 3600
 
         # API request timeout (seconds)
         self._timeout = 30
@@ -201,7 +201,7 @@ class ReadwiseClient:
         elif timeframe == "week":
             return now - datetime.timedelta(days=7)
         elif timeframe == "month":
-            return now - datetime.timedelta(days=30)
+            return now - datetime.timedelta(days=31)
         elif timeframe == "year":
             return now - datetime.timedelta(days=365)
         else:
@@ -236,10 +236,11 @@ class ReadwiseClient:
         if not refresh and cache["data"] and cache_age < self._cache_expiry:
             return cache["data"][:limit] if limit else cache["data"]
 
+        # Get fresh data from the API
+
         # If we've already completed a full load and we're not explicitly refreshing,
         # just update the timestamp and return the cached data
         if cache["complete"] and not refresh:
-            cache["last_updated"] = current_time
             return cache["data"][:limit] if limit else cache["data"]
 
         try:
@@ -257,42 +258,15 @@ class ReadwiseClient:
 
                 # Convert documents to our expected format - use a more efficient method
                 # for large datasets
-                if len(documents) > 100:  # noqa: PLR2004
-                    articles = []
-                    # Process in smaller batches to avoid UI blocking
-                    batch_size = 50
-                    for i in range(0, len(documents), batch_size):
-                        batch: list[Document] = documents[i : i + batch_size]
-                        articles.extend(
-                            [
-                                self._convert_document_to_dict(document=doc)
-                                for doc in batch
-                            ]
-                        )
-                else:
-                    articles: list[dict[str, Any]] = [
-                        self._convert_document_to_dict(document=doc)
-                        for doc in documents
-                    ]
+                articles: list[dict[str, Any]] = [
+                    self._convert_document_to_dict(document=doc)
+                    for doc in documents
+                ]
 
                 # Update the cache
                 cache["data"] = articles
                 cache["last_updated"] = current_time
                 cache["complete"] = True
-
-                # Update the article cache more efficiently - only store IDs we don't already have
-                # or ones that have changed
-                for article in articles:
-                    article_id: str = article["id"]
-                    if article_id not in self._article_cache:
-                        self._article_cache[article_id] = article
-                    else:
-                        # Only update if the article has been modified
-                        existing_article = self._article_cache[article_id]
-                        if article.get("updated_at", "") != existing_article.get(
-                            "updated_at", ""
-                        ):
-                            self._article_cache[article_id] = article
 
                 return articles[:limit] if limit else articles
 

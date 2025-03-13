@@ -76,9 +76,6 @@ class RWReader(App[None]):
         ("q", "quit", "Quit"),
         # Loading more items
         ("space", "load_more", "Load more items"),
-        # Debug - hidden from help
-        ("ctrl+d", "debug_dump", ""),  # Dump debug info
-        ("ctrl+r", "debug_reset_cache", ""),  # Reset cache
     ]
 
     CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
