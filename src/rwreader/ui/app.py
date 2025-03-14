@@ -31,6 +31,7 @@ from ..utils.ui_helpers import (
     safe_set_text_style,
 )
 from .screens.confirm import DeleteArticleScreen
+from .screens.fullscreen import FullScreenMarkdown
 from .screens.help import HelpScreen
 from .widgets.api_status import APIStatusWidget
 from .widgets.link_selection_screen import LinkSelectionScreen
@@ -60,6 +61,7 @@ class RWReader(App[None]):
         ("i", "move_to_inbox", "Move to Inbox"),
         ("o", "open_in_browser", "Open in browser"),
         ("m", "show_metadata", "Show metadata"),
+        ("M", "maximize_content", "Maximize content"),
         ("D", "delete_article", "Delete article"),
         # Link actions
         ("ctrl+o", "open_links", "Open article links"),
@@ -517,6 +519,12 @@ class RWReader(App[None]):
             self.notify(
                 message=f"Error opening link: {e}", title="Error", severity="error"
             )
+
+    def action_maximize_content(self) -> None:
+          """Maximize the content pane."""
+          self.push_screen(
+              screen=FullScreenMarkdown(markdown_content=self.content_markdown)
+          )
 
     @work
     async def action_open_links(self) -> None:

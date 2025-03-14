@@ -368,11 +368,6 @@ class ReadwiseClient:
                 document: Document | None = self._api.get_document_by_id(id=article_id)
             except Exception as doc_error:
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
-                # Try alternate method if doc_id doesn't work
-                try:
-                    document = self._api.get_document_by_id(id=article_id)
-                except Exception as alt_error:
-                    logger.error(msg=f"Alternate method also failed: {alt_error}")
 
             if document:
                 # Create base article dict from the document
