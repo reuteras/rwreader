@@ -139,3 +139,10 @@ Markdown {
     /* This ensures content wraps at the max-width */
     overflow-x: hidden;
 }
+
+LinkSelectionScreen ListView {
+    margin: 1 0;
+    max-height: 20;
+    overflow-y: auto;
+    width: 60%;
+}
