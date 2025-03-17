@@ -8,6 +8,7 @@
         "markdownify",
         "pytest",
         "Readwise",
+        "renderable",
         "rwreader",
         "tcss",
         "ttrsscli",
