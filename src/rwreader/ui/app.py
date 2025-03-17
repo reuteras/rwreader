@@ -526,7 +526,6 @@ class RWReader(App[None]):
               screen=FullScreenMarkdown(markdown_content=self.content_markdown)
           )
 
-    @work
     async def action_open_links(self) -> None:
         """Show a list of links in the article and open the selected one in a browser."""
         # Make sure we have an article loaded
@@ -551,7 +550,7 @@ class RWReader(App[None]):
         link_screen = LinkSelectionScreen(
             links=links, configuration=self.configuration, action="browser"
         )
-        await self.push_screen(screen=link_screen)
+        self.push_screen(screen=link_screen)
 
     @work
     async def action_save_link(self) -> None:

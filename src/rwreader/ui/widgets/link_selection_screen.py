@@ -1,6 +1,7 @@
 """Link selection screen for rwreader."""
 
 import logging
+import os
 import webbrowser
 from pathlib import Path
 from typing import Any, Literal
@@ -8,7 +9,6 @@ from urllib.parse import urlparse
 
 import httpx
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import (
     Footer,
@@ -24,9 +24,10 @@ logger: logging.Logger = logging.getLogger(name=__name__)
 class LinkSelectionScreen(ModalScreen):
     """Modal screen to show extracted links and allow selection."""
 
-    BINDINGS: list[Binding | tuple[str, str] | tuple[str, str, str]] = [  # noqa: RUF012
-        ("escape", "cancel", "Cancel"),
+    BINDINGS = [  # noqa: RUF012
         ("enter", "select", "Select"),
+        ("escape", "cancel", "Cancel"),
+        ("s", "select", "Select"),
     ]
 
     def __init__(
@@ -109,8 +110,13 @@ class LinkSelectionScreen(ModalScreen):
 
     def action_select(self) -> None:
         """Process the selected link."""
+        self.notify(message="Processing link selection...", title="Processing", severity="information", timeout=5)
+
         if not self.links:
             self.dismiss()
+            self.app.notify(
+                message="No links found in article", title="Error", severity="warning"
+            )
             return
 
         link_list: ListView = self.query_one(
@@ -142,6 +148,10 @@ class LinkSelectionScreen(ModalScreen):
                 self._download_file(url=url)
             elif self.action == "readwise":
                 self._save_to_readwise(url=url)
+            else:
+                self.app.notify(
+                    message="Invalid action", title="Error", severity="error"
+                )
 
             self.dismiss()
         except Exception as e:
@@ -232,24 +242,32 @@ class LinkSelectionScreen(ModalScreen):
             loading.display = True
 
             # Save the document
-            success, response = self.client.save_document(url=url)
+            import readwise
+            os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
+            from readwise.model import PostResponse
+
+            # Show a progress indicator during the API call
+            self.app.push_screen(screen="progress")
+
+            # Save to Readwise
+            response: tuple[bool, PostResponse] = readwise.save_document(url=url)
 
             # Hide loading indicator
             loading.display = False
 
-            if success:
-                self.app.notify(message="Link saved to Readwise", title="Readwise")
-
-                # Open in browser if requested
-                if self.open_after_save and hasattr(response, "url") and response.url:
-                    webbrowser.open(url=response.url)
-            else:
-                error_msg: str = getattr(response, "error", "Unknown error")
-                self.app.notify(
-                    message=f"Error saving to Readwise: {error_msg}",
-                    title="Error",
-                    severity="error",
+            if response[1].url and response[1].id:
+                self.notify(
+                    title="Readwise",
+                    message="Link saved to Readwise.",
+                    timeout=5,
                 )
+            else:
+                self.notify(
+                    title="Readwise",
+                    message="Error saving link to Readwise.",
+                    timeout=5,
+                    severity="error",
+                )        
         except Exception as e:
             # Hide loading indicator
             loading = self.query_one(
