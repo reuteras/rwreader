@@ -33,8 +33,8 @@ from ..utils.ui_helpers import (
 from .screens.confirm import DeleteArticleScreen
 from .screens.fullscreen import FullScreenMarkdown
 from .screens.help import HelpScreen
+from .screens.link_screens import LinkSelectionScreen
 from .widgets.api_status import APIStatusWidget
-from .widgets.link_selection_screen import LinkSelectionScreen
 from .widgets.linkable_markdown_viewer import LinkableMarkdownViewer
 from .widgets.load_more import LoadMoreWidget
 
@@ -252,7 +252,7 @@ class RWReader(App[None]):
     async def on_list_view_highlighted(self, message: Any) -> None:
         """Handle list view item highlighting with improved performance."""
         highlighted_item: Any = message.item
-        if not highlighted_item or not hasattr(highlighted_item, "id"):
+        if not highlighted_item or not (hasattr(highlighted_item, "id") and highlighted_item.id is not None):
             return
 
         # Check if this is a navigation item
@@ -548,7 +548,7 @@ class RWReader(App[None]):
 
         # Show link selection screen
         link_screen = LinkSelectionScreen(
-            links=links, configuration=self.configuration, action="browser"
+            links=links, configuration=self.configuration, open_links="browser"
         )
         self.push_screen(screen=link_screen)
 
@@ -575,7 +575,7 @@ class RWReader(App[None]):
 
         # Show link selection screen
         link_screen = LinkSelectionScreen(
-            links=links, configuration=self.configuration, action="download"
+            links=links, configuration=self.configuration, open_links="download"
         )
         await self.push_screen(screen=link_screen)
 
@@ -609,7 +609,7 @@ class RWReader(App[None]):
 
         # Show link selection screen
         link_screen = LinkSelectionScreen(
-            links=links, configuration=self.configuration, action="readwise"
+            links=links, configuration=self.configuration, open_links="readwise"
         )
         await self.push_screen(screen=link_screen)
 
@@ -645,8 +645,8 @@ class RWReader(App[None]):
         link_screen = LinkSelectionScreen(
             links=links,
             configuration=self.configuration,
-            action="readwise",
-            open_after_save=True,
+            open_links="readwise",
+            open=True,
         )
         await self.push_screen(screen=link_screen)
 
