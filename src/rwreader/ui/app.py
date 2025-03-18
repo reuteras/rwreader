@@ -12,6 +12,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import (
     Footer,
@@ -80,78 +81,49 @@ class RWReader(App[None]):
         ("space", "load_more", "Load more items"),
     ]
 
+    SCREENS: ClassVar[dict[str, type[Screen]]] = {
+        "delete_article": DeleteArticleScreen,
+        "maximize_content": FullScreenMarkdown,
+        "help": HelpScreen,
+        "open_links": LinkSelectionScreen,
+    }
+
     CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
 
     def __init__(self) -> None:
         """Initialize the app and connect to Readwise API."""
         super().__init__()  # Initialize first for early access to notify/etc.
 
-        try:
-            # Load the configuration
-            self.configuration = Configuration(exec_args=sys.argv[1:])
+        # Load the configuration
+        self.configuration = Configuration(exec_args=sys.argv[1:])
 
-            # Set theme based on configuration
-            self.theme = (
-                "textual-dark"
-                if self.configuration.default_theme == "dark"
-                else "textual-light"
-            )
+        # Set theme based on configuration
+        self.theme = (
+            "textual-dark"
+            if self.configuration.default_theme == "dark"
+            else "textual-light"
+        )
 
-            # State variables
-            self.current_article_id: str | None = None
-            self.current_article: dict[str, Any] | None = None
-            self.current_category: str = "inbox"  # Default category
-            self.content_markdown: str = (
-                "# Welcome to Readwise Reader TUI\n\nSelect an article to read."
-            )
+        # State variables
+        self.current_article_id: str | None = None
+        self.current_article: dict[str, Any] | None = None
+        self.current_category: str = "inbox"  # Default category
+        self.content_markdown: str = (
+            "# Welcome to Readwise Reader TUI\n\nSelect an article to read."
+        )
 
-            # Progressive loading state
-            self.is_loading: bool = False
-            self.initial_page_size: int = 20  # Number of items to load initially
-            self.items_loaded: dict[str, int] = {
-                "feed": 0,
-                "inbox": 0,
-                "later": 0,
-                "archive": 0,
-            }
-
-        except Exception as e:
-            logger.error(msg=f"Initialization error: {e}")
-            print(f"Error: {e}")
-            sys.exit(1)
+        # Progressive loading state
+        self.is_loading: bool = False
+        self.initial_page_size: int = 20  # Number of items to load initially
+        self.items_loaded: dict[str, int] = {
+            "feed": 0,
+            "inbox": 0,
+            "later": 0,
+            "archive": 0,
+        }
 
     async def on_ready(self) -> None:
         """Connect to the Readwise API and load initial data."""
-        self.client: ReadwiseClient = await create_readwise_client(
-            token=self.configuration.token
-        )
-
-        # Highlight the Inbox item by default
-        await self._select_nav_item(item_id="nav_inbox")
-
-        # Load initial articles
-        await self.load_category(category="inbox", initial_load=True)
-
-    def compose(self) -> ComposeResult:
-        """Compose the three-pane layout with progressive loading support."""
-        yield Header(show_clock=True)
-        with Horizontal():
-            yield ListView(id="navigation")
-            with Vertical():
-                with Vertical(id="articles_container"):
-                    yield ListView(id="articles")
-                    yield LoadMoreWidget(id="load_more")
-                    yield LoadingIndicator(id="loading_indicator")
-                yield LinkableMarkdownViewer(
-                    markdown=self.content_markdown,
-                    id="content",
-                    show_table_of_contents=False,
-                    open_links=False,
-                )
-        yield APIStatusWidget(name="api_status")
-        yield Footer()
-
-    async def on_mount(self) -> None:
         """Load library data when the app is mounted."""
         # Set up navigation list
         nav_list: ListView = self.query_one(
@@ -198,6 +170,35 @@ class RWReader(App[None]):
 
         # Focus on the navigation list
         nav_list.focus()
+
+        self.client: ReadwiseClient = await create_readwise_client(
+            token=self.configuration.token
+        )
+
+        # Highlight the Inbox item by default
+        await self._select_nav_item(item_id="nav_inbox")
+
+        # Load initial articles
+        await self.load_category(category="inbox", initial_load=True)
+
+    def compose(self) -> ComposeResult:
+        """Compose the three-pane layout with progressive loading support."""
+        yield Header(show_clock=True)
+        with Horizontal():
+            yield ListView(id="navigation")
+            with Vertical():
+                with Vertical(id="articles_container"):
+                    yield ListView(id="articles")
+                    yield LoadMoreWidget(id="load_more")
+                    yield LoadingIndicator(id="loading_indicator")
+                yield LinkableMarkdownViewer(
+                    markdown=self.content_markdown,
+                    id="content",
+                    show_table_of_contents=False,
+                    open_links=False,
+                )
+        yield APIStatusWidget(name="api_status")
+        yield Footer()
 
     async def _select_nav_item(self, item_id: str) -> None:
         """Select a navigation item by ID.
