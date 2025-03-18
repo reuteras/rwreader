@@ -4,6 +4,10 @@ import logging
 import sys
 from pathlib import Path
 
+from .ui.app import RWReader
+
+# Create the application instance
+app = RWReader()
 
 def main() -> None:
     """Main entry point for rwreader."""
@@ -18,15 +22,6 @@ def main() -> None:
     logger: logging.Logger = logging.getLogger(name="rwreader.main")
 
     try:
-        # Import the app here to ensure logging is configured first
-        from .ui.app import RWReader
-
-        # Log system info (safely)
-        logger.info(msg="Starting rwreader")
-        logger.info(msg=f"Python version: {sys.version}")
-
-        # Create and run application instance
-        app = RWReader()
         app.run()
     except KeyboardInterrupt:
         # Handle Ctrl+C gracefully
