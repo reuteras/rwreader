@@ -9,6 +9,7 @@ from .ui.app import RWReader
 # Create the application instance
 app = RWReader()
 
+
 def main() -> None:
     """Main entry point for rwreader."""
     # Create logs directory if it doesn't exist

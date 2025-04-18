@@ -25,6 +25,12 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - **m**: Show detailed article metadata
 - **D**: Delete article
 
+## Search
+- **ctrl+f**: Search within the current article
+- **f3**: Go to next search match
+- **shift+f3**: Go to previous search match
+- **escape**: Clear search results
+
 ## Link Actions
 - **ctrl+o**: Open links from article
 - **ctrl+s**: Save link to downloads
@@ -52,6 +58,7 @@ HELP_TEXT = """# Readwise Reader TUI Help
 - Use the 'm' key to view all available metadata for an article
 - When an article is displayed, you can move it to any category with a single keystroke
 - The app now uses progressive loading for better performance with large libraries
+- Use search to quickly find text within articles (Ctrl+F)
 
 ## Debug
 - **Ctrl+R**: Reset cache and reload all data

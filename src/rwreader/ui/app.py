@@ -35,6 +35,8 @@ from .screens.confirm import DeleteArticleScreen
 from .screens.fullscreen import FullScreenMarkdown
 from .screens.help import HelpScreen
 from .screens.link_screens import LinkSelectionScreen
+
+# SearchScreen will be imported when needed to avoid circular imports
 from .widgets.api_status import APIStatusWidget
 from .widgets.linkable_markdown_viewer import LinkableMarkdownViewer
 from .widgets.load_more import LoadMoreWidget
@@ -64,6 +66,11 @@ class RWReader(App[None]):
         ("m", "show_metadata", "Show metadata"),
         ("M", "maximize_content", "Maximize content"),
         ("D", "delete_article", "Delete article"),
+        # Search functionality
+        ("ctrl+f", "search_in_article", "Search in article"),
+        ("f3", "search_next", "Find next"),
+        ("shift+f3", "search_previous", "Find previous"),
+        ("escape", "clear_search", "Clear search"),
         # Link actions
         ("ctrl+o", "open_links", "Open article links"),
         ("ctrl+s", "save_link", "Save article link"),
@@ -253,7 +260,9 @@ class RWReader(App[None]):
     async def on_list_view_highlighted(self, message: Any) -> None:
         """Handle list view item highlighting with improved performance."""
         highlighted_item: Any = message.item
-        if not highlighted_item or not (hasattr(highlighted_item, "id") and highlighted_item.id is not None):
+        if not highlighted_item or not (
+            hasattr(highlighted_item, "id") and highlighted_item.id is not None
+        ):
             return
 
         # Check if this is a navigation item
@@ -301,6 +310,11 @@ class RWReader(App[None]):
         content_view: LinkableMarkdownViewer = self.query_one(
             selector="#content", expect_type=LinkableMarkdownViewer
         )
+
+        # Clear any existing search before loading new content
+        content_view.clear_search()
+
+        # Now update with loading message
         content_view.update_content(markdown="# Loading article...\n\nPlease wait...")
 
         try:
@@ -522,10 +536,10 @@ class RWReader(App[None]):
             )
 
     def action_maximize_content(self) -> None:
-          """Maximize the content pane."""
-          self.push_screen(
-              screen=FullScreenMarkdown(markdown_content=self.content_markdown)
-          )
+        """Maximize the content pane."""
+        self.push_screen(
+            screen=FullScreenMarkdown(markdown_content=self.content_markdown)
+        )
 
     async def action_open_links(self) -> None:
         """Show a list of links in the article and open the selected one in a browser."""
@@ -960,6 +974,120 @@ class RWReader(App[None]):
             self.pop_screen()
         else:
             self.push_screen(screen=HelpScreen())
+
+    @work  # This decorator is needed to run push_screen_wait
+    async def action_search_in_article(self) -> None:
+        """Show search dialog for the current article."""
+        # Make sure we have an article displayed
+        if not self.current_article:
+            self.notify(
+                message="No article selected to search",
+                title="Search",
+                severity="warning",
+            )
+            return
+
+        try:
+            # Dynamically import SearchScreen to avoid circular imports
+            from .screens.search import SearchScreen
+
+            # Get the current content viewer to check if there's an active search
+            content_view = self.query_one("#content", LinkableMarkdownViewer)
+            initial_query = content_view.current_search or ""
+
+            # Show search screen with the previous search query pre-filled
+            search_screen = SearchScreen(initial_query=initial_query)
+
+            # Wait for the result
+            query = await self.push_screen_wait(screen=search_screen)
+
+            # If we got a query back, perform the search
+            if query:
+                self._perform_search(query=query)
+        except Exception as e:
+            logger.error(msg=f"Error showing search dialog: {e}")
+            self.notify(
+                message=f"Error showing search dialog: {e}",
+                title="Error",
+                severity="error",
+            )
+
+    def _perform_search(self, query: str) -> None:
+        """Perform search in the current article.
+
+        Args:
+            query: The search query
+        """
+        try:
+            content_view: LinkableMarkdownViewer = self.query_one(
+                selector="#content", expect_type=LinkableMarkdownViewer
+            )
+            content_view.search_text(query=query)
+        except Exception as e:
+            logger.error(msg=f"Error performing search: {e}")
+            self.notify(message=f"Search error: {e}", title="Error", severity="error")
+
+    def action_search_next(self) -> None:
+        """Go to the next search match."""
+        try:
+            content_view: LinkableMarkdownViewer = self.query_one(
+                selector="#content", expect_type=LinkableMarkdownViewer
+            )
+
+            # Check if we have an active search
+            if not content_view.current_search:
+                self.notify(
+                    message="No active search. Press Ctrl+F to search",
+                    title="Search",
+                    severity="warning",
+                )
+                return
+
+            content_view.goto_next_match()
+        except Exception as e:
+            logger.error(msg=f"Error navigating to next match: {e}")
+            self.notify(
+                message=f"Navigation error: {e}", title="Error", severity="error"
+            )
+
+    def action_search_previous(self) -> None:
+        """Go to the previous search match."""
+        try:
+            content_view: LinkableMarkdownViewer = self.query_one(
+                selector="#content", expect_type=LinkableMarkdownViewer
+            )
+
+            # Check if we have an active search
+            if not content_view.current_search:
+                self.notify(
+                    message="No active search. Press Ctrl+F to search",
+                    title="Search",
+                    severity="warning",
+                )
+                return
+
+            content_view.goto_previous_match()
+        except Exception as e:
+            logger.error(msg=f"Error navigating to previous match: {e}")
+            self.notify(
+                message=f"Navigation error: {e}", title="Error", severity="error"
+            )
+
+    def action_clear_search(self) -> None:
+        """Clear the current search results."""
+        try:
+            content_view: LinkableMarkdownViewer = self.query_one(
+                selector="#content", expect_type=LinkableMarkdownViewer
+            )
+
+            if content_view.current_search:
+                content_view.clear_search()
+                self.notify(message="Search cleared", title="Search", timeout=2)
+        except Exception as e:
+            logger.error(msg=f"Error clearing search: {e}")
+            self.notify(
+                message=f"Error clearing search: {e}", title="Error", severity="error"
+            )
 
     async def load_category(self, category: str, initial_load: bool = False) -> None:  # noqa: PLR0912, PLR0915
         """Load articles for the given category."""

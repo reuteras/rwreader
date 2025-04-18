@@ -259,8 +259,7 @@ class ReadwiseClient:
                 # Convert documents to our expected format - use a more efficient method
                 # for large datasets
                 articles: list[dict[str, Any]] = [
-                    self._convert_document_to_dict(document=doc)
-                    for doc in documents
+                    self._convert_document_to_dict(document=doc) for doc in documents
                 ]
 
                 # Update the cache
