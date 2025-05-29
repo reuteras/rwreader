@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rwreader"
-version = "0.1.0"
+version = "0.1.1"
 description = "A terminal user interface for Readwise Reader"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Peter Reuterås", email = "peter@reuteras.net"},
 ]
 readme = "README.md"
 requires-python = ">=3.11"
