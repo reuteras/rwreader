@@ -136,18 +136,18 @@ class RWReader(App[None]):
         )
 
         # Add category items with data attributes - disable markup
-        inbox_item = ListItem(Static(content="Inbox", markup=False), id="nav_inbox")
+        inbox_item = ListItem(Static(content="Inbox (...)", markup=False), id="nav_inbox")
         inbox_item.data = {"category": "inbox"}  # type: ignore
 
-        later_item = ListItem(Static(content="Later", markup=False), id="nav_later")
+        later_item = ListItem(Static(content="Later (...)", markup=False), id="nav_later")
         later_item.data = {"category": "later"}  # type: ignore
 
         archive_item = ListItem(
-            Static(content="Archive", markup=False), id="nav_archive"
+            Static(content="Archive (...)", markup=False), id="nav_archive"
         )
         archive_item.data = {"category": "archive"}  # type: ignore
 
-        feed_item = ListItem(Static(content="Feed", markup=False), id="nav_feed")
+        feed_item = ListItem(Static(content="Feed (...)", markup=False), id="nav_feed")
         feed_item.data = {"category": "feed"}  # type: ignore
 
         # Add items to the list
@@ -180,6 +180,9 @@ class RWReader(App[None]):
 
         # Load initial articles
         await self.load_category(category="inbox", initial_load=True)
+
+        # Update navigation counts after initial load
+        await self.update_navigation_counts()
 
     def compose(self) -> ComposeResult:
         """Compose the three-pane layout with progressive loading support."""
@@ -688,6 +691,8 @@ class RWReader(App[None]):
                         await item.remove()
                         break
 
+                await self.update_navigation_counts()
+
                 # Clear the content view
                 self.action_clear()
             except Exception as e:
@@ -832,6 +837,52 @@ class RWReader(App[None]):
             self.notify(
                 message=f"Error refreshing data: {e}", title="Error", severity="error"
             )
+
+    async def update_navigation_counts(self) -> None:
+        """Update navigation items with current item counts."""
+        try:
+            nav_list: ListView = self.query_one(selector="#navigation", expect_type=ListView)
+        
+            # Get counts - use simple approach first
+            counts = {}
+            try:
+                # Get cached data lengths to avoid API calls when possible
+                inbox_data = self.client._category_cache.get("inbox", {}).get("data", [])
+                feed_data = self.client._category_cache.get("feed", {}).get("data", [])
+                later_data = self.client._category_cache.get("later", {}).get("data", [])
+                archive_data = self.client._category_cache.get("archive", {}).get("data", [])
+                
+                counts["inbox"] = len(inbox_data) if inbox_data else self.items_loaded.get("inbox", 0)
+                counts["feed"] = len([a for a in feed_data if a.get("first_opened_at") == ""]) if feed_data else self.items_loaded.get("feed", 0)
+                counts["later"] = len(later_data) if later_data else self.items_loaded.get("later", 0)
+                counts["archive"] = len(archive_data) if archive_data else self.items_loaded.get("archive", 0)
+                
+            except Exception as e:
+                logger.error(f"Error getting counts: {e}")
+                # Fallback to loaded counts
+                counts = {
+                    "inbox": self.items_loaded.get("inbox", 0),
+                    "feed": self.items_loaded.get("feed", 0),
+                    "later": self.items_loaded.get("later", 0),
+                    "archive": self.items_loaded.get("archive", 0),
+                }
+            
+            # Update navigation items
+            for item in nav_list.children:
+                if hasattr(item, "id") and hasattr(item, "data") and item.data: # type: ignore
+                    category = item.data["category"] # type: ignore
+                    if category and category in counts:
+                        count = counts[category]
+                        category_name = category.capitalize()
+                        new_content = f"{category_name} ({count})"
+
+                        # Update the text
+                        static_widget = item.children[0] if item.children else None
+                        if static_widget and hasattr(static_widget, 'update'):
+                            static_widget.update(new_content) # type: ignore
+                            
+        except Exception as e:
+            logger.error(f"Error updating navigation counts: {e}")
 
     async def action_load_more(self) -> None:
         """Load more articles for the current category."""
@@ -1096,6 +1147,9 @@ class RWReader(App[None]):
                     ):
                         article_id: str = first_item.id.replace("art_", "")
                         await self.display_article(article_id=article_id)
+            if initial_load:
+                # Update navigation counts after loading
+                await self.update_navigation_counts()
         except Exception as e:
             logger.error(msg=f"Error loading category {category}: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
@@ -1139,6 +1193,8 @@ class RWReader(App[None]):
                         category=self.current_category, initial_load=True
                     )
 
+                await self.update_navigation_counts()
+
                 # Update the article display
                 if self.current_article_id:
                     await self.display_article(article_id=self.current_article_id)
@@ -1169,6 +1225,8 @@ class RWReader(App[None]):
                         category=self.current_category, initial_load=True
                     )
 
+                await self.update_navigation_counts()
+
                 # Update the article display
                 if self.current_article_id:
                     await self.display_article(article_id=self.current_article_id)
@@ -1198,6 +1256,8 @@ class RWReader(App[None]):
                     await self.load_category(
                         category=self.current_category, initial_load=True
                     )
+
+                await self.update_navigation_counts()
 
                 # Update the article display
                 if self.current_article_id:
