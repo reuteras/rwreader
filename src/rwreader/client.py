@@ -259,8 +259,7 @@ class ReadwiseClient:
                 # Convert documents to our expected format - use a more efficient method
                 # for large datasets
                 articles: list[dict[str, Any]] = [
-                    self._convert_document_to_dict(document=doc)
-                    for doc in documents
+                    self._convert_document_to_dict(document=doc) for doc in documents
                 ]
 
                 # Update the cache
@@ -677,6 +676,51 @@ class ReadwiseClient:
         """Clear the entire cache."""
         self._invalidate_cache()
         self._article_cache = {}
+
+    def get_feed_count(self) -> int:
+        """Get count of unread articles in the Feed efficiently.
+
+        Returns:
+            Number of unread feed articles
+        """
+        try:
+            # Try to get from cache first
+            feed_cache = self._category_cache.get("feed", {})
+            feed_data = feed_cache.get("data", [])
+
+            if feed_data:
+                # Count unread articles (first_opened_at is empty)
+                return len([a for a in feed_data if a.get("first_opened_at") == ""])
+
+            # If no cache, make a lightweight API call
+            documents: list[Document] = self._api.get_documents(location="feed")
+            unread_count = len([doc for doc in documents if not doc.first_opened_at])
+
+            return unread_count
+        except Exception as e:
+            logger.error(f"Error getting feed count: {e}")
+            return 0
+
+    def get_later_count(self) -> int:
+        """Get count of articles in Later efficiently.
+
+        Returns:
+            Number of articles in Later
+        """
+        try:
+            # Try to get from cache first
+            later_cache = self._category_cache.get("later", {})
+            later_data = later_cache.get("data", [])
+
+            if later_data:
+                return len(later_data)
+
+            # If no cache, make a lightweight API call
+            documents: list[Document] = self._api.get_documents(location="later")
+            return len(documents)
+        except Exception as e:
+            logger.error(f"Error getting later count: {e}")
+            return 0
 
     def close(self) -> None:
         """Close the client and clean up resources."""

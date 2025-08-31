@@ -49,6 +49,8 @@ class RWReader(App[None]):
         # Navigation
         ("j", "next_item", "Next item"),
         ("k", "previous_item", "Previous item"),
+        ("J", "next_category", "Next category"),
+        ("K", "previous_category", "Previous category"),
         ("tab", "focus_next_pane", "Next pane"),
         ("shift+tab", "focus_previous_pane", "Previous pane"),
         # Direct navigation to categories
@@ -79,6 +81,9 @@ class RWReader(App[None]):
         ("q", "quit", "Quit"),
         # Loading more items
         ("space", "load_more", "Load more items"),
+        # Testing background updates
+        ("ctrl+u", "test_background_update", "Test background update"),
+        ("ctrl+r", "refresh_counts", "Refresh all counts"),
     ]
 
     SCREENS: ClassVar[dict[str, type[Screen]]] = {
@@ -121,6 +126,13 @@ class RWReader(App[None]):
             "later": 0,
             "archive": 0,
         }
+        
+        # Background count tracking
+        self.background_counts: dict[str, int] = {
+            "feed": 0,
+            "later": 0,
+        }
+        self.background_update_interval: int = 300  # 5 minutes in seconds
 
     async def on_ready(self) -> None:
         """Connect to the Readwise API and load initial data."""
@@ -182,7 +194,22 @@ class RWReader(App[None]):
         await self.load_category(category="inbox", initial_load=True)
 
         # Update navigation counts after initial load
+        logger.debug(f"Before navigation count update - items_loaded: {self.items_loaded}")
+        
+        # Debug cache state
+        if hasattr(self, 'client') and self.client:
+            for cat in ['inbox', 'feed', 'later', 'archive']:
+                cache_info = self.client._category_cache.get(cat, {})
+                logger.debug(f"Cache for {cat}: last_updated={cache_info.get('last_updated', 0)}, data_len={len(cache_info.get('data', []))}")
+        
         await self.update_navigation_counts()
+
+        # Start background count updates and do an immediate update
+        self.start_background_count_updates()
+        
+        # Trigger an immediate background count update for feed and later
+        logger.debug("Triggering immediate background count update on startup")
+        self.update_background_counts()
 
     def compose(self) -> ComposeResult:
         """Compose the three-pane layout with progressive loading support."""
@@ -852,10 +879,11 @@ class RWReader(App[None]):
                 later_data = self.client._category_cache.get("later", {}).get("data", [])
                 archive_data = self.client._category_cache.get("archive", {}).get("data", [])
                 
-                counts["inbox"] = len(inbox_data) if inbox_data else self.items_loaded.get("inbox", 0)
-                counts["feed"] = len([a for a in feed_data if a.get("first_opened_at") == ""]) if feed_data else self.items_loaded.get("feed", 0)
-                counts["later"] = len(later_data) if later_data else self.items_loaded.get("later", 0)
-                counts["archive"] = len(archive_data) if archive_data else self.items_loaded.get("archive", 0)
+                # Get counts for each category
+                counts["inbox"] = self._get_category_count("inbox", inbox_data)
+                counts["feed"] = self._get_category_count("feed", feed_data, count_unread=True)
+                counts["later"] = self._get_category_count("later", later_data)
+                counts["archive"] = self._get_category_count("archive", archive_data)
                 
             except Exception as e:
                 logger.error(f"Error getting counts: {e}")
@@ -874,7 +902,10 @@ class RWReader(App[None]):
                     if category and category in counts:
                         count = counts[category]
                         category_name = category.capitalize()
-                        new_content = f"{category_name} ({count})"
+                        if count >= 0:
+                            new_content = f"{category_name} ({count})"
+                        else:
+                            new_content = f"{category_name} (...)"
 
                         # Update the text
                         static_widget = item.children[0] if item.children else None
@@ -883,6 +914,174 @@ class RWReader(App[None]):
                             
         except Exception as e:
             logger.error(f"Error updating navigation counts: {e}")
+
+    def _get_category_count(self, category: str, cache_data: list, count_unread: bool = False) -> int:
+        """Get count for a category, handling cache vs loaded items logic."""
+        # For feed and later, check background counts first (but only if > 0)
+        if category in self.background_counts and self.background_counts[category] > 0:
+            logger.debug(f"Using background count for {category}: {self.background_counts[category]}")
+            return self.background_counts[category]
+        
+        # Check if cache has been populated or if we have loaded items
+        cache_info = self.client._category_cache.get(category, {})
+        last_updated = cache_info.get("last_updated", 0)
+        loaded_count = self.items_loaded.get(category, 0)
+        
+        # For debugging
+        logger.debug(f"Count logic for {category}: last_updated={last_updated}, cache_len={len(cache_data)}, loaded={loaded_count}")
+        
+        # If we've attempted to load this category OR cache is populated, show actual count
+        # We check if the category exists in items_loaded (meaning we tried to load it)
+        if category in self.items_loaded or last_updated > 0:
+            if count_unread and cache_data:
+                count = len([a for a in cache_data if a.get("first_opened_at") == ""])
+                logger.debug(f"Using cache unread count for {category}: {count}")
+                return count
+            elif cache_data is not None:
+                logger.debug(f"Using cache count for {category}: {len(cache_data)}")
+                return len(cache_data)
+            else:
+                logger.debug(f"Using loaded count for {category}: {loaded_count}")
+                return loaded_count
+        
+        # No data available yet - this should show as "(...)"
+        logger.debug(f"No data available for {category}, showing as (...)")
+        return -1  # Special value to indicate "no data yet"
+
+    def start_background_count_updates(self) -> None:
+        """Start the background worker for count updates."""
+        # Schedule the first update after initial load
+        self.set_timer(self.background_update_interval, self._trigger_background_update)
+
+    def _trigger_background_update(self) -> None:
+        """Trigger a background update and schedule the next one."""
+        try:
+            logger.debug("Triggering background count update")
+            # Check if app is still running
+            if self.is_running:
+                self.update_background_counts()
+                # Schedule the next update
+                self.set_timer(self.background_update_interval, self._trigger_background_update)
+            else:
+                logger.debug("App not running, stopping background updates")
+        except Exception as e:
+            logger.error(f"Error in trigger background update: {e}")
+            # Try to reschedule anyway
+            self.set_timer(self.background_update_interval, self._trigger_background_update)
+
+    @work(exclusive=False, thread=True)
+    def update_background_counts(self) -> None:
+        """Background worker to update feed and later counts periodically."""
+        try:
+            logger.debug("Starting background count update")
+            # Check if app is still running
+            if not self.is_running:
+                logger.debug("App not running, skipping background count update")
+                return
+                
+            # Get fresh counts from the client
+            if hasattr(self, 'client') and self.client:
+                logger.debug("Client found, getting counts")
+                # Get feed count (unread articles only)
+                new_feed_count = self.client.get_feed_count()
+                logger.debug(f"Feed count: {new_feed_count}")
+                
+                # Get later count
+                new_later_count = self.client.get_later_count()
+                logger.debug(f"Later count: {new_later_count}")
+                
+                # Check if counts have changed
+                feed_changed = new_feed_count != self.background_counts["feed"]
+                later_changed = new_later_count != self.background_counts["later"]
+                
+                logger.debug(f"Counts changed - Feed: {feed_changed} ({self.background_counts['feed']} -> {new_feed_count}), Later: {later_changed} ({self.background_counts['later']} -> {new_later_count})")
+                
+                if feed_changed or later_changed:
+                    # Update background counts
+                    self.background_counts["feed"] = new_feed_count
+                    self.background_counts["later"] = new_later_count
+                    
+                    # Schedule UI update on the main thread
+                    self.call_from_thread(self.update_background_navigation_counts)
+                    
+                    logger.info(f"Background counts updated - Feed: {new_feed_count}, Later: {new_later_count}")
+                else:
+                    logger.debug("No count changes detected")
+            else:
+                logger.warning("No client available for background count update")
+                    
+        except Exception as e:
+            logger.error(f"Error in background count update: {e}")
+
+    async def action_test_background_update(self) -> None:
+        """Manually test background count update."""
+        logger.info("Manual background count update triggered")
+        self.update_background_counts()
+
+    async def action_refresh_counts(self) -> None:
+        """Manually refresh all navigation counts."""
+        logger.info("Manual count refresh triggered")
+        logger.debug(f"Current items_loaded: {self.items_loaded}")
+        logger.debug(f"Current background_counts: {self.background_counts}")
+        await self.update_navigation_counts()
+
+    async def action_next_category(self) -> None:
+        """Move to the next category in the navigation."""
+        await self._move_category(direction=1)
+
+    async def action_previous_category(self) -> None:
+        """Move to the previous category in the navigation."""
+        await self._move_category(direction=-1)
+
+    async def _move_category(self, direction: int) -> None:
+        """Move to next/previous category in navigation list."""
+        try:
+            nav_list: ListView = self.query_one(selector="#navigation", expect_type=ListView)
+            
+            # Focus the navigation list first
+            nav_list.focus()
+            
+            current_index = nav_list.index
+            if current_index is None:
+                current_index = 0
+            
+            # Calculate new index with wrapping
+            new_index = (current_index + direction) % len(nav_list.children)
+            nav_list.index = new_index
+            
+            # Get the selected item and load its category
+            selected_item = nav_list.children[new_index]
+            if hasattr(selected_item, "data") and selected_item.data:
+                category = selected_item.data["category"]  # type: ignore
+                logger.debug(f"Moving to category: {category}")
+                if category != self.current_category:
+                    self.current_category = category
+                    await self.load_category(category=category, initial_load=True)
+                        
+        except Exception as e:
+            logger.error(f"Error moving between categories: {e}")
+
+    def update_background_navigation_counts(self) -> None:
+        """Update navigation counts using background data."""
+        try:
+            nav_list: ListView = self.query_one(selector="#navigation", expect_type=ListView)
+            
+            # Update only feed and later navigation items
+            for item in nav_list.children:
+                if hasattr(item, "id") and hasattr(item, "data") and item.data:  # type: ignore
+                    category = item.data["category"]  # type: ignore
+                    if category in self.background_counts:
+                        count = self.background_counts[category]
+                        category_name = category.capitalize()
+                        new_content = f"{category_name} ({count})"
+
+                        # Update the text
+                        static_widget = item.children[0] if item.children else None
+                        if static_widget and hasattr(static_widget, 'update'):
+                            static_widget.update(new_content)  # type: ignore
+                            
+        except Exception as e:
+            logger.error(f"Error updating background navigation counts: {e}")
 
     async def action_load_more(self) -> None:
         """Load more articles for the current category."""
