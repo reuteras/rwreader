@@ -132,7 +132,7 @@ textual run --dev src/rwreader/main.py    # Run with Textual dev tools
 
 - Navigation: j/k, tab/shift+tab, F/I/L/A (categories) and J/K up/down for categories
 - Article actions: a/l/i (move), o (open), m/M (metadata/maximize)
-- Link actions: ctrl+o/s/l (open/save/readwise links)  
+- Link actions: ctrl+o/s/l (open/save/readwise links)
 - App controls: ?/h (help), d (dark mode), G/, (refresh), q (quit)
 
 ### Security Considerations

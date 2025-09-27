@@ -126,7 +126,7 @@ class RWReader(App[None]):
             "later": 0,
             "archive": 0,
         }
-        
+
         # Background count tracking
         self.background_counts: dict[str, int] = {
             "feed": 0,
@@ -195,18 +195,18 @@ class RWReader(App[None]):
 
         # Update navigation counts after initial load
         logger.debug(f"Before navigation count update - items_loaded: {self.items_loaded}")
-        
+
         # Debug cache state
         if hasattr(self, 'client') and self.client:
             for cat in ['inbox', 'feed', 'later', 'archive']:
                 cache_info = self.client._category_cache.get(cat, {})
                 logger.debug(f"Cache for {cat}: last_updated={cache_info.get('last_updated', 0)}, data_len={len(cache_info.get('data', []))}")
-        
+
         await self.update_navigation_counts()
 
         # Start background count updates and do an immediate update
         self.start_background_count_updates()
-        
+
         # Trigger an immediate background count update for feed and later
         logger.debug("Triggering immediate background count update on startup")
         self.update_background_counts()
@@ -869,7 +869,7 @@ class RWReader(App[None]):
         """Update navigation items with current item counts."""
         try:
             nav_list: ListView = self.query_one(selector="#navigation", expect_type=ListView)
-        
+
             # Get counts - use simple approach first
             counts = {}
             try:
@@ -878,13 +878,13 @@ class RWReader(App[None]):
                 feed_data = self.client._category_cache.get("feed", {}).get("data", [])
                 later_data = self.client._category_cache.get("later", {}).get("data", [])
                 archive_data = self.client._category_cache.get("archive", {}).get("data", [])
-                
+
                 # Get counts for each category
                 counts["inbox"] = self._get_category_count("inbox", inbox_data)
                 counts["feed"] = self._get_category_count("feed", feed_data, count_unread=True)
                 counts["later"] = self._get_category_count("later", later_data)
                 counts["archive"] = self._get_category_count("archive", archive_data)
-                
+
             except Exception as e:
                 logger.error(f"Error getting counts: {e}")
                 # Fallback to loaded counts
@@ -894,7 +894,7 @@ class RWReader(App[None]):
                     "later": self.items_loaded.get("later", 0),
                     "archive": self.items_loaded.get("archive", 0),
                 }
-            
+
             # Update navigation items
             for item in nav_list.children:
                 if hasattr(item, "id") and hasattr(item, "data") and item.data: # type: ignore
@@ -911,7 +911,7 @@ class RWReader(App[None]):
                         static_widget = item.children[0] if item.children else None
                         if static_widget and hasattr(static_widget, 'update'):
                             static_widget.update(new_content) # type: ignore
-                            
+
         except Exception as e:
             logger.error(f"Error updating navigation counts: {e}")
 
@@ -921,15 +921,15 @@ class RWReader(App[None]):
         if category in self.background_counts and self.background_counts[category] > 0:
             logger.debug(f"Using background count for {category}: {self.background_counts[category]}")
             return self.background_counts[category]
-        
+
         # Check if cache has been populated or if we have loaded items
         cache_info = self.client._category_cache.get(category, {})
         last_updated = cache_info.get("last_updated", 0)
         loaded_count = self.items_loaded.get(category, 0)
-        
+
         # For debugging
         logger.debug(f"Count logic for {category}: last_updated={last_updated}, cache_len={len(cache_data)}, loaded={loaded_count}")
-        
+
         # If we've attempted to load this category OR cache is populated, show actual count
         # We check if the category exists in items_loaded (meaning we tried to load it)
         if category in self.items_loaded or last_updated > 0:
@@ -943,7 +943,7 @@ class RWReader(App[None]):
             else:
                 logger.debug(f"Using loaded count for {category}: {loaded_count}")
                 return loaded_count
-        
+
         # No data available yet - this should show as "(...)"
         logger.debug(f"No data available for {category}, showing as (...)")
         return -1  # Special value to indicate "no data yet"
@@ -978,38 +978,38 @@ class RWReader(App[None]):
             if not self.is_running:
                 logger.debug("App not running, skipping background count update")
                 return
-                
+
             # Get fresh counts from the client
             if hasattr(self, 'client') and self.client:
                 logger.debug("Client found, getting counts")
                 # Get feed count (unread articles only)
                 new_feed_count = self.client.get_feed_count()
                 logger.debug(f"Feed count: {new_feed_count}")
-                
+
                 # Get later count
                 new_later_count = self.client.get_later_count()
                 logger.debug(f"Later count: {new_later_count}")
-                
+
                 # Check if counts have changed
                 feed_changed = new_feed_count != self.background_counts["feed"]
                 later_changed = new_later_count != self.background_counts["later"]
-                
+
                 logger.debug(f"Counts changed - Feed: {feed_changed} ({self.background_counts['feed']} -> {new_feed_count}), Later: {later_changed} ({self.background_counts['later']} -> {new_later_count})")
-                
+
                 if feed_changed or later_changed:
                     # Update background counts
                     self.background_counts["feed"] = new_feed_count
                     self.background_counts["later"] = new_later_count
-                    
+
                     # Schedule UI update on the main thread
                     self.call_from_thread(self.update_background_navigation_counts)
-                    
+
                     logger.info(f"Background counts updated - Feed: {new_feed_count}, Later: {new_later_count}")
                 else:
                     logger.debug("No count changes detected")
             else:
                 logger.warning("No client available for background count update")
-                    
+
         except Exception as e:
             logger.error(f"Error in background count update: {e}")
 
@@ -1037,18 +1037,18 @@ class RWReader(App[None]):
         """Move to next/previous category in navigation list."""
         try:
             nav_list: ListView = self.query_one(selector="#navigation", expect_type=ListView)
-            
+
             # Focus the navigation list first
             nav_list.focus()
-            
+
             current_index = nav_list.index
             if current_index is None:
                 current_index = 0
-            
+
             # Calculate new index with wrapping
             new_index = (current_index + direction) % len(nav_list.children)
             nav_list.index = new_index
-            
+
             # Get the selected item and load its category
             selected_item = nav_list.children[new_index]
             if hasattr(selected_item, "data") and selected_item.data:
@@ -1057,7 +1057,7 @@ class RWReader(App[None]):
                 if category != self.current_category:
                     self.current_category = category
                     await self.load_category(category=category, initial_load=True)
-                        
+
         except Exception as e:
             logger.error(f"Error moving between categories: {e}")
 
@@ -1065,7 +1065,7 @@ class RWReader(App[None]):
         """Update navigation counts using background data."""
         try:
             nav_list: ListView = self.query_one(selector="#navigation", expect_type=ListView)
-            
+
             # Update only feed and later navigation items
             for item in nav_list.children:
                 if hasattr(item, "id") and hasattr(item, "data") and item.data:  # type: ignore
@@ -1079,7 +1079,7 @@ class RWReader(App[None]):
                         static_widget = item.children[0] if item.children else None
                         if static_widget and hasattr(static_widget, 'update'):
                             static_widget.update(new_content)  # type: ignore
-                            
+
         except Exception as e:
             logger.error(f"Error updating background navigation counts: {e}")
 
