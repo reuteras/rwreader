@@ -22,7 +22,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/rwreader.git
+git clone https://github.com/reuteras/rwreader.git
 cd rwreader
 
 # Install the package
@@ -56,7 +56,7 @@ rwreader
 
 ## Keyboard Shortcuts
 
-```
+```markdown
 ## Navigation
 - j / k: Navigate up and down in the current pane
 - Arrow keys: Navigate in the current pane
