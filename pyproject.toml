@@ -50,6 +50,7 @@ dev = [
 target-version = "py311"
 lint.select = [
     "PL",   # Pylint
+    "E",    # pycodestyle
     "F",    # pyflakes
     "I",    # isort
     "D",    # pydocstyle
