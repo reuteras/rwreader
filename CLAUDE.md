@@ -14,7 +14,7 @@
 
 ## Project Structure
 
-```
+```markdown
 src/rwreader/
 ├── main.py                 # Main entry point and CLI setup
 ├── config.py              # Configuration handling with 1Password CLI support
