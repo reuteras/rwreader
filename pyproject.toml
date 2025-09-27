@@ -40,22 +40,6 @@ rwreader = "rwreader.main:main"
 [tool.setuptools]
 package-dir = {"" = "src"}
 
-[tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-
-[tool.isort]
-profile = "black"
-line_length = 88
-
-[tool.black]
-line-length = 88
-target-version = ['py39']
-include = '\.pyi?$'
-
 [dependency-groups]
 dev = [
     "ruff>=0.9.10",
