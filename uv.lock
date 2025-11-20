@@ -1037,7 +1037,7 @@ requires-dist = [
     { name = "readwise-api", git = "https://github.com/reuteras/readwise-api.git" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rich", specifier = ">=13.3.5" },
-    { name = "textual", specifier = ">=0.27.0" },
+    { name = "textual", specifier = ">=6.0.0" },
     { name = "toml", specifier = ">=0.10.2" },
 ]
 

@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "textual>=0.27.0",
+    "textual>=6.0.0",
     "httpx>=0.24.0",
     "toml>=0.10.2",
     "rich>=13.3.5",
