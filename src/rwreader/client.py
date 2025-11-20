@@ -5,12 +5,22 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, cast
 
 import readwise
 import requests
 from readwise.api import ReadwiseReader
 from readwise.model import Document
+
+from .exceptions import (
+    ArticleError,
+    CacheError,
+    ReadwiseAPIError,
+    ReadwiseAuthenticationError,
+    ReadwiseNotFoundError,
+    ReadwiseRateLimitError,
+    ReadwiseServerError,
+)
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -57,7 +67,7 @@ class ReadwiseClient:
         }
 
         # Cache for individual articles
-        self._article_cache = {}
+        self._article_cache: dict[str, dict[str, Any]] = {}
 
         # Cache expiry time (1 hour)
         self._cache_expiry = 3600
@@ -144,7 +154,8 @@ class ReadwiseClient:
             and cache_age < self._cache_expiry
             and cache.get("timeframe") == timeframe
         ):
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
         try:
             # Calculate the date range based on timeframe
@@ -178,12 +189,14 @@ class ReadwiseClient:
             except Exception as e:
                 logger.error(msg=f"Error in get_documents for archive: {e}")
                 # Return whatever we have in the cache
-                return cache["data"][:limit] if limit else cache["data"]
+                data = cast(list[dict[str, Any]], cache["data"])
+                return data[:limit] if limit else data
 
         except Exception as e:
             logger.error(msg=f"Error fetching archive: {e}")
             # Return whatever we have in the cache
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
     def _get_date_for_timeframe(self, timeframe: str) -> datetime.datetime:
         """Get a date based on the specified timeframe.
@@ -234,14 +247,16 @@ class ReadwiseClient:
 
         # Only use cache if: not refreshing, has data, and not expired
         if not refresh and cache["data"] and cache_age < self._cache_expiry:
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
         # Get fresh data from the API
 
         # If we've already completed a full load and we're not explicitly refreshing,
         # just update the timestamp and return the cached data
         if cache["complete"] and not refresh:
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
         try:
             # If refreshing, reset the cache
@@ -270,14 +285,35 @@ class ReadwiseClient:
                 return articles[:limit] if limit else articles
 
             except Exception as e:
+                error_msg = str(e).lower()
                 logger.error(msg=f"Error in get_documents for {cache_key}: {e}")
-                # Return whatever we have in the cache
-                return cache["data"][:limit] if limit else cache["data"]
 
+                # Check for specific error types
+                if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
+                    raise ReadwiseAuthenticationError(f"Authentication failed for {cache_key}: {e}") from e
+                elif "404" in error_msg or "not found" in error_msg:
+                    raise ReadwiseNotFoundError(f"Resource not found for {cache_key}: {e}") from e
+                elif "429" in error_msg or "rate limit" in error_msg:
+                    raise ReadwiseRateLimitError(f"Rate limit exceeded for {cache_key}: {e}") from e
+                elif "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
+                    raise ReadwiseServerError(f"Readwise server error for {cache_key}: {e}") from e
+                else:
+                    # Return cached data for other errors
+                    data = cast(list[dict[str, Any]], cache["data"])
+                    if not data:
+                        raise ReadwiseAPIError(f"Error fetching {cache_key} and no cached data available: {e}") from e
+                    return data[:limit] if limit else data
+
+        except (ReadwiseAuthenticationError, ReadwiseNotFoundError, ReadwiseRateLimitError, ReadwiseServerError, ReadwiseAPIError):
+            # Re-raise our custom exceptions
+            raise
         except Exception as e:
-            logger.error(msg=f"Error fetching {cache_key}: {e}")
+            logger.error(msg=f"Unexpected error fetching {cache_key}: {e}")
             # Return whatever we have in the cache
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            if not data:
+                raise ReadwiseAPIError(f"Unexpected error fetching {cache_key} and no cached data available: {e}") from e
+            return data[:limit] if limit else data
 
     def _convert_document_to_dict(self, document: Any) -> dict[str, Any]:
         """Convert a Document object from readwise-api to a dictionary format.
@@ -319,7 +355,7 @@ class ReadwiseClient:
             return article_dict
         except Exception as e:
             logger.error(msg=f"Error converting document to dict: {e}")
-            # Return a minimal fallback dictionary
+            # Try to create a minimal fallback dictionary
             try:
                 return {
                     "id": getattr(document, "id", "unknown"),
@@ -334,15 +370,8 @@ class ReadwiseClient:
                 logger.error(
                     f"Severe error in fallback dictionary creation: {nested_e}"
                 )
-                return {
-                    "id": "unknown",
-                    "title": "Error Loading Document",
-                    "url": "",
-                    "archived": False,
-                    "saved_for_later": False,
-                    "read": False,
-                    "state": "reading",
-                }
+                # Raise ArticleError if we can't even create a fallback
+                raise ArticleError(f"Failed to convert document to dictionary: {e}") from e
 
     def get_article(self, article_id: str) -> dict[str, Any] | None:  # noqa: PLR0912, PLR0915
         """Get full article content with enhanced debugging.
@@ -355,18 +384,29 @@ class ReadwiseClient:
         """
         # First, check if full article (with content) is in cache
         if article_id in self._article_cache:
-            article = self._article_cache[article_id]
+            cached_article = self._article_cache[article_id]
             # Check if the article in cache has content or html_content
-            if article.get("content") or article.get("html_content"):
-                return article
+            if cached_article.get("content") or cached_article.get("html_content"):
+                return cached_article
 
         try:
             # Get document by ID first without html content
-            document = None
+            document: Document | None = None
             try:
-                document: Document | None = self._api.get_document_by_id(id=article_id)
+                document = self._api.get_document_by_id(id=article_id)
             except Exception as doc_error:
+                error_msg = str(doc_error).lower()
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
+
+                # Check for specific error types
+                if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
+                    raise ReadwiseAuthenticationError(f"Authentication failed getting article {article_id}: {doc_error}") from doc_error
+                elif "404" in error_msg or "not found" in error_msg:
+                    raise ReadwiseNotFoundError(f"Article {article_id} not found", resource_id=article_id) from doc_error
+                elif "429" in error_msg or "rate limit" in error_msg:
+                    raise ReadwiseRateLimitError(f"Rate limit exceeded getting article {article_id}: {doc_error}") from doc_error
+                elif "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
+                    raise ReadwiseServerError(f"Readwise server error getting article {article_id}: {doc_error}") from doc_error
 
             if document:
                 # Create base article dict from the document
@@ -428,14 +468,14 @@ class ReadwiseClient:
                             if not content_found:
                                 # Find the largest string field that might contain content
                                 largest_field = None
-                                largest_size = 0
+                                largest_size: int = 0
                                 for field, value in first_result.items():
                                     if (
                                         isinstance(value, str)
                                         and len(value) > largest_size
                                         and field not in ["id", "title", "url"]
                                     ):
-                                        largest_size: int = len(value)
+                                        largest_size = len(value)
                                         largest_field = field
 
                                 if (
@@ -453,6 +493,23 @@ class ReadwiseClient:
                     ):
                         article["content"] = document.content
 
+                except requests.HTTPError as http_err:
+                    # Handle HTTP errors specifically
+                    status_code = http_err.response.status_code if http_err.response else None
+                    logger.error(msg=f"HTTP error fetching article content: {http_err}")
+
+                    if status_code == 401:  # noqa: PLR2004
+                        raise ReadwiseAuthenticationError(f"Authentication failed getting content for {article_id}") from http_err
+                    elif status_code == 404:  # noqa: PLR2004
+                        raise ReadwiseNotFoundError(f"Content not found for article {article_id}", resource_id=article_id) from http_err
+                    elif status_code == 429:  # noqa: PLR2004
+                        raise ReadwiseRateLimitError(f"Rate limit exceeded fetching content for {article_id}") from http_err
+                    elif status_code and status_code >= 500:  # noqa: PLR2004
+                        raise ReadwiseServerError(f"Server error fetching content for {article_id}", status_code=status_code) from http_err
+                    else:
+                        # Try to use content from original document as fallback
+                        if hasattr(document, "content") and document.content:
+                            article["content"] = document.content
                 except Exception as e:
                     logger.error(msg=f"Error fetching HTML content: {e}")
                     # Try to use any content from the original document as fallback

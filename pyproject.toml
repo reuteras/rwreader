@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "textual>=0.27.0",
+    "textual>=6.0.0",
     "httpx>=0.24.0",
     "toml>=0.10.2",
     "rich>=13.3.5",
@@ -44,6 +44,12 @@ package-dir = {"" = "src"}
 dev = [
     "ruff>=0.9.10",
     "textual-dev>=1.7.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "mypy>=1.8.0",
+    "types-requests>=2.31.0",
+    "types-toml>=0.10.8",
 ]
 
 [tool.ruff]
@@ -96,3 +102,59 @@ readwise-api = { git = "https://github.com/reuteras/readwise-api.git" }
 
 [tool.ruff.lint.pydocstyle]
 convention="google"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=rwreader",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+extra_checks = true
+
+# Start with these disabled, enable gradually
+disallow_any_generics = false
+disallow_subclassing_any = false
+
+[[tool.mypy.overrides]]
+module = "readwise.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "markdownify.*"
+ignore_missing_imports = true
