@@ -9,7 +9,7 @@ I've analyzed **termflux** (a Python Textual-based Miniflux TUI client) and the 
 ## 1. PROJECT STRUCTURE COMPARISON
 
 ### termflux (143 lines, Single File)
-```
+```text
 /tmp/termflux/
 ├── termflux.py          (143 lines - complete application)
 ├── pyproject.toml       (32 lines)
@@ -18,7 +18,7 @@ I've analyzed **termflux** (a Python Textual-based Miniflux TUI client) and the 
 ```
 
 ### rwreader (20+ files, Modular)
-```
+```text
 src/rwreader/
 ├── main.py
 ├── config.py
@@ -34,7 +34,7 @@ src/rwreader/
 ```
 
 ### Miniflux Python Client (1071 lines, Single File API Library)
-```
+```text
 /tmp/python-client/
 ├── miniflux.py          (1071 lines - complete API client)
 ├── tests/
@@ -164,7 +164,7 @@ class Client:
 ## 3. TESTING APPROACHES
 
 ### Miniflux Python Client (BEST PRACTICE)
-```
+```text
 1350 test lines covering:
 - Error handling (404, 401, 403, 500, 400)
 - API endpoint validation
@@ -245,7 +245,7 @@ def test_1password_integration(self):
 - Single file becomes unmaintainable at 500+ LOC
 
 **Architecture:**
-```
+```text
 main() → login_flow() → ui() → Termflux(App)
                                    ├── on_mount() [fetch data]
                                    ├── compose() [UI]
@@ -269,7 +269,7 @@ main() → login_flow() → ui() → Termflux(App)
 - Potentially higher memory overhead
 
 **Architecture:**
-```
+```text
 main.py [entry point]
     ├── config.py [configuration management]
     │   └── TOML parsing + 1Password CLI support
@@ -816,9 +816,10 @@ textual run --dev src/rwreader/main.py
 ```
 
 ## Project Structure
-- `src/rwreader/` - Source code
-- `tests/` - Unit tests
-- `docs/` - Documentation
+```text
+- src/rwreader/ - Source code
+- tests/ - Unit tests
+- docs/ - Documentation
 ```
 
 ---

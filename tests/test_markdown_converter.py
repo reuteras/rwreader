@@ -1,7 +1,5 @@
 """Tests for the markdown_converter module."""
 
-import pytest
-
 from rwreader.utils.markdown_converter import (
     extract_links,
     format_timestamp,

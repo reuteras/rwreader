@@ -35,7 +35,7 @@ All analysis documents are organized by depth and use case. Choose your path:
 
 ## Document Map
 
-```
+```text
 INDEX.md (this file - quick navigation)
 │
 ├─ README_ANALYSIS.md (7.4 KB)
@@ -67,7 +67,7 @@ INDEX.md (this file - quick navigation)
 
 ## How to Use
 
-1. **New to analysis?** 
+1. **New to analysis?**
    - Read README_ANALYSIS.md first
    - Then choose your depth level
 
