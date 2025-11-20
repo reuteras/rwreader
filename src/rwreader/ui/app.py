@@ -12,6 +12,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import (
@@ -95,6 +96,11 @@ class RWReader(App[None]):
 
     CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
 
+    # Reactive state attributes - automatically trigger UI updates when changed
+    current_article_id: reactive[str | None] = reactive(None)
+    current_category: reactive[str] = reactive("inbox")
+    is_loading: reactive[bool] = reactive(False)
+
     def __init__(self) -> None:
         """Initialize the app and connect to Readwise API."""
         super().__init__()  # Initialize first for early access to notify/etc.
@@ -109,16 +115,13 @@ class RWReader(App[None]):
             else "textual-light"
         )
 
-        # State variables
-        self.current_article_id: str | None = None
+        # Non-reactive state variables
         self.current_article: dict[str, Any] | None = None
-        self.current_category: str = "inbox"  # Default category
         self.content_markdown: str = (
             "# Welcome to Readwise Reader TUI\n\nSelect an article to read."
         )
 
         # Progressive loading state
-        self.is_loading: bool = False
         self.initial_page_size: int = 20  # Number of items to load initially
         self.items_loaded: dict[str, int] = {
             "feed": 0,
@@ -133,6 +136,41 @@ class RWReader(App[None]):
             "later": 0,
         }
         self.background_update_interval: int = 300  # 5 minutes in seconds
+
+    def watch_current_category(self, new_category: str) -> None:
+        """Called automatically when current_category changes.
+
+        Args:
+            new_category: The new category value
+        """
+        logger.debug(f"Category changed to: {new_category}")
+        # UI updates can happen here automatically when category changes
+
+    def watch_current_article_id(self, new_article_id: str | None) -> None:
+        """Called automatically when current_article_id changes.
+
+        Args:
+            new_article_id: The new article ID value
+        """
+        logger.debug(f"Article ID changed to: {new_article_id}")
+        # Article display logic can be triggered here automatically
+
+    def watch_is_loading(self, is_loading: bool) -> None:
+        """Called automatically when is_loading changes.
+
+        Args:
+            is_loading: The new loading state
+        """
+        logger.debug(f"Loading state changed to: {is_loading}")
+        # Update loading indicators automatically
+        try:
+            loading_indicator: LoadingIndicator = self.query_one(
+                selector="#loading_indicator", expect_type=LoadingIndicator
+            )
+            loading_indicator.display = is_loading
+        except Exception:
+            # Widget may not be mounted yet
+            pass
 
     async def on_ready(self) -> None:
         """Connect to the Readwise API and load initial data."""
@@ -1089,13 +1127,7 @@ class RWReader(App[None]):
             return
 
         try:
-            self.is_loading = True
-
-            # Show loading indicator
-            loading_indicator: LoadingIndicator = self.query_one(
-                selector="#loading_indicator", expect_type=LoadingIndicator
-            )
-            loading_indicator.display = True
+            self.is_loading = True  # Automatically shows loading indicator via watch_is_loading
 
             # Hide load more button while loading
             load_more: LoadMoreWidget = self.query_one(
@@ -1145,11 +1177,7 @@ class RWReader(App[None]):
                 severity="error",
             )
         finally:
-            # Hide loading indicator
-            loading_indicator = self.query_one(
-                selector="#loading_indicator", expect_type=LoadingIndicator
-            )
-            loading_indicator.display = False
+            # Hide loading indicator automatically via watch_is_loading
             self.is_loading = False
 
     def action_focus_next_pane(self) -> None:
@@ -1219,12 +1247,9 @@ class RWReader(App[None]):
                 self.current_article = None
                 self.current_article_id = None
 
-            # Show loading indicator if this is an initial load
-            loading_indicator: LoadingIndicator = self.query_one(
-                selector="#loading_indicator", expect_type=LoadingIndicator
-            )
+            # Show loading indicator if this is an initial load (via reactive attribute)
             if initial_load:
-                loading_indicator.display = True
+                self.is_loading = True
                 # Create a header text for notifications
                 header_text: str = category.capitalize()
 
@@ -1367,11 +1392,8 @@ class RWReader(App[None]):
             except Exception as nested_e:
                 logger.error(msg=f"Failed to add error message to list: {nested_e}")
         finally:
-            # Hide loading indicator
-            loading_indicator = self.query_one(
-                selector="#loading_indicator", expect_type=LoadingIndicator
-            )
-            loading_indicator.display = False
+            # Hide loading indicator automatically via watch_is_loading
+            self.is_loading = False
 
     async def action_move_to_inbox(self) -> None:
         """Move the current article to Inbox."""
