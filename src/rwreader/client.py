@@ -288,31 +288,27 @@ class ReadwiseClient:
                 error_msg = str(e).lower()
                 logger.error(msg=f"Error in get_documents for {cache_key}: {e}")
 
-                # Check for specific error types
+                # Check for specific error types that should raise exceptions
                 if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
                     raise ReadwiseAuthenticationError(f"Authentication failed for {cache_key}: {e}") from e
-                elif "404" in error_msg or "not found" in error_msg:
-                    raise ReadwiseNotFoundError(f"Resource not found for {cache_key}: {e}") from e
                 elif "429" in error_msg or "rate limit" in error_msg:
                     raise ReadwiseRateLimitError(f"Rate limit exceeded for {cache_key}: {e}") from e
                 elif "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
                     raise ReadwiseServerError(f"Readwise server error for {cache_key}: {e}") from e
                 else:
-                    # Return cached data for other errors
+                    # For non-critical errors (404, network issues, etc.), return cached data (even if empty)
+                    # This preserves backward compatibility
                     data = cast(list[dict[str, Any]], cache["data"])
-                    if not data:
-                        raise ReadwiseAPIError(f"Error fetching {cache_key} and no cached data available: {e}") from e
                     return data[:limit] if limit else data
 
-        except (ReadwiseAuthenticationError, ReadwiseNotFoundError, ReadwiseRateLimitError, ReadwiseServerError, ReadwiseAPIError):
-            # Re-raise our custom exceptions
+        except (ReadwiseAuthenticationError, ReadwiseRateLimitError, ReadwiseServerError):
+            # Re-raise critical exceptions
             raise
         except Exception as e:
             logger.error(msg=f"Unexpected error fetching {cache_key}: {e}")
-            # Return whatever we have in the cache
+            # Return cached data (even if empty) for unexpected errors
+            # This maintains backward compatibility with the original behavior
             data = cast(list[dict[str, Any]], cache["data"])
-            if not data:
-                raise ReadwiseAPIError(f"Unexpected error fetching {cache_key} and no cached data available: {e}") from e
             return data[:limit] if limit else data
 
     def _convert_document_to_dict(self, document: Any) -> dict[str, Any]:
@@ -398,15 +394,14 @@ class ReadwiseClient:
                 error_msg = str(doc_error).lower()
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
 
-                # Check for specific error types
+                # Check for critical error types only
                 if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
                     raise ReadwiseAuthenticationError(f"Authentication failed getting article {article_id}: {doc_error}") from doc_error
-                elif "404" in error_msg or "not found" in error_msg:
-                    raise ReadwiseNotFoundError(f"Article {article_id} not found", resource_id=article_id) from doc_error
                 elif "429" in error_msg or "rate limit" in error_msg:
                     raise ReadwiseRateLimitError(f"Rate limit exceeded getting article {article_id}: {doc_error}") from doc_error
                 elif "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
                     raise ReadwiseServerError(f"Readwise server error getting article {article_id}: {doc_error}") from doc_error
+                # For 404 and other errors, let document remain None and return None below
 
             if document:
                 # Create base article dict from the document
@@ -494,20 +489,18 @@ class ReadwiseClient:
                         article["content"] = document.content
 
                 except requests.HTTPError as http_err:
-                    # Handle HTTP errors specifically
+                    # Handle critical HTTP errors only
                     status_code = http_err.response.status_code if http_err.response else None
                     logger.error(msg=f"HTTP error fetching article content: {http_err}")
 
                     if status_code == 401:  # noqa: PLR2004
                         raise ReadwiseAuthenticationError(f"Authentication failed getting content for {article_id}") from http_err
-                    elif status_code == 404:  # noqa: PLR2004
-                        raise ReadwiseNotFoundError(f"Content not found for article {article_id}", resource_id=article_id) from http_err
                     elif status_code == 429:  # noqa: PLR2004
                         raise ReadwiseRateLimitError(f"Rate limit exceeded fetching content for {article_id}") from http_err
                     elif status_code and status_code >= 500:  # noqa: PLR2004
                         raise ReadwiseServerError(f"Server error fetching content for {article_id}", status_code=status_code) from http_err
                     else:
-                        # Try to use content from original document as fallback
+                        # For 404 and other errors, try to use content from original document as fallback
                         if hasattr(document, "content") and document.content:
                             article["content"] = document.content
                 except Exception as e:
