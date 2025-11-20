@@ -67,7 +67,7 @@ def get_conf_value(op_command: str) -> str:
 class Configuration:
     """A class to handle configuration values."""
 
-    def __init__(self, exec_args=None) -> None:  # noqa: PLR0915
+    def __init__(self, exec_args: list[str] | None = None) -> None:  # noqa: PLR0915
         """Initialize the configuration.
 
         Args:

@@ -5,7 +5,7 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, cast
 
 import readwise
 import requests
@@ -57,7 +57,7 @@ class ReadwiseClient:
         }
 
         # Cache for individual articles
-        self._article_cache = {}
+        self._article_cache: dict[str, dict[str, Any]] = {}
 
         # Cache expiry time (1 hour)
         self._cache_expiry = 3600
@@ -144,7 +144,8 @@ class ReadwiseClient:
             and cache_age < self._cache_expiry
             and cache.get("timeframe") == timeframe
         ):
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
         try:
             # Calculate the date range based on timeframe
@@ -178,12 +179,14 @@ class ReadwiseClient:
             except Exception as e:
                 logger.error(msg=f"Error in get_documents for archive: {e}")
                 # Return whatever we have in the cache
-                return cache["data"][:limit] if limit else cache["data"]
+                data = cast(list[dict[str, Any]], cache["data"])
+                return data[:limit] if limit else data
 
         except Exception as e:
             logger.error(msg=f"Error fetching archive: {e}")
             # Return whatever we have in the cache
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
     def _get_date_for_timeframe(self, timeframe: str) -> datetime.datetime:
         """Get a date based on the specified timeframe.
@@ -234,14 +237,16 @@ class ReadwiseClient:
 
         # Only use cache if: not refreshing, has data, and not expired
         if not refresh and cache["data"] and cache_age < self._cache_expiry:
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
         # Get fresh data from the API
 
         # If we've already completed a full load and we're not explicitly refreshing,
         # just update the timestamp and return the cached data
         if cache["complete"] and not refresh:
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
         try:
             # If refreshing, reset the cache
@@ -272,12 +277,14 @@ class ReadwiseClient:
             except Exception as e:
                 logger.error(msg=f"Error in get_documents for {cache_key}: {e}")
                 # Return whatever we have in the cache
-                return cache["data"][:limit] if limit else cache["data"]
+                data = cast(list[dict[str, Any]], cache["data"])
+                return data[:limit] if limit else data
 
         except Exception as e:
             logger.error(msg=f"Error fetching {cache_key}: {e}")
             # Return whatever we have in the cache
-            return cache["data"][:limit] if limit else cache["data"]
+            data = cast(list[dict[str, Any]], cache["data"])
+            return data[:limit] if limit else data
 
     def _convert_document_to_dict(self, document: Any) -> dict[str, Any]:
         """Convert a Document object from readwise-api to a dictionary format.
@@ -355,16 +362,16 @@ class ReadwiseClient:
         """
         # First, check if full article (with content) is in cache
         if article_id in self._article_cache:
-            article = self._article_cache[article_id]
+            cached_article = self._article_cache[article_id]
             # Check if the article in cache has content or html_content
-            if article.get("content") or article.get("html_content"):
-                return article
+            if cached_article.get("content") or cached_article.get("html_content"):
+                return cached_article
 
         try:
             # Get document by ID first without html content
-            document = None
+            document: Document | None = None
             try:
-                document: Document | None = self._api.get_document_by_id(id=article_id)
+                document = self._api.get_document_by_id(id=article_id)
             except Exception as doc_error:
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
 
@@ -428,14 +435,14 @@ class ReadwiseClient:
                             if not content_found:
                                 # Find the largest string field that might contain content
                                 largest_field = None
-                                largest_size = 0
+                                largest_size: int = 0
                                 for field, value in first_result.items():
                                     if (
                                         isinstance(value, str)
                                         and len(value) > largest_size
                                         and field not in ["id", "title", "url"]
                                     ):
-                                        largest_size: int = len(value)
+                                        largest_size = len(value)
                                         largest_field = field
 
                                 if (
