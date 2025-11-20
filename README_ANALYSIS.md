@@ -49,13 +49,13 @@ This directory now contains comprehensive analysis and recommendations for moder
 
 ## Quick Start Navigation
 
-### If you have 5 minutes:
+### If you have 5 minutes
 Read `TEXTUAL_QUICK_REFERENCE.txt` - covers:
 - What's good about rwreader ✓
 - Top 3 improvements needed
 - Priority checklist
 
-### If you have 30 minutes:
+### If you have 30 minutes
 Read `TEXTUAL_ANALYSIS.md` sections:
 1. Executive Summary
 2. Directory Structure Comparison
@@ -63,13 +63,13 @@ Read `TEXTUAL_ANALYSIS.md` sections:
 4. Specific Recommendations for rwreader
 5. Final Recommendations
 
-### If you have 1+ hours:
+### If you have 1+ hours
 Read complete `TEXTUAL_ANALYSIS.md` + start with `IMPLEMENTATION_EXAMPLES.md`:
 - Understand all architectural patterns
 - Review code examples
 - Plan implementation approach
 
-### If you're ready to implement:
+### If you're ready to implement
 Follow `IMPLEMENTATION_EXAMPLES.md`:
 1. Start with tests (P0)
 2. Update Textual version (P0)
@@ -114,7 +114,7 @@ Follow `IMPLEMENTATION_EXAMPLES.md`:
 ## Projects Analyzed
 
 ### 1. termflux
-- **URL:** https://github.com/alexpdp7/termflux
+- **URL:** <https://github.com/alexpdp7/termflux>
 - **Type:** Miniflux TUI client
 - **Size:** 143 lines (single file)
 - **Status:** Simple, modern Textual (0.85.0)
@@ -122,7 +122,7 @@ Follow `IMPLEMENTATION_EXAMPLES.md`:
 - **Verdict:** Good for learning, not scalable
 
 ### 2. Miniflux Python Client
-- **URL:** https://github.com/miniflux/python-client
+- **URL:** <https://github.com/miniflux/python-client>
 - **Type:** API library (not TUI)
 - **Size:** 1071 lines + 1350 test lines
 - **Status:** Well-tested, best practices
@@ -141,7 +141,7 @@ Follow `IMPLEMENTATION_EXAMPLES.md`:
 ## File Organization
 
 All analysis files are in the rwreader repository root:
-```
+```text
 /home/user/rwreader/
 ├── README_ANALYSIS.md                 (this file)
 ├── TEXTUAL_QUICK_REFERENCE.txt        (start here)
@@ -157,7 +157,7 @@ All analysis files are in the rwreader repository root:
 ## Implementation Roadmap
 
 ### Phase 1: Foundation (Weeks 1-2)
-```
+```text
 [ ] Create tests/ directory structure
 [ ] Add test_client.py with basic API tests
 [ ] Add test_cache.py for cache functionality
@@ -167,7 +167,7 @@ All analysis files are in the rwreader repository root:
 ```
 
 ### Phase 2: Modernization (Weeks 3-4)
-```
+```text
 [ ] Update textual: 0.27.0 → 0.85.0+
 [ ] Create exceptions.py with exception hierarchy
 [ ] Update client.py to use new exceptions
@@ -176,7 +176,7 @@ All analysis files are in the rwreader repository root:
 ```
 
 ### Phase 3: Enhancement (Weeks 5-6)
-```
+```text
 [ ] Add type hints throughout codebase
 [ ] Implement reactive attributes in ui/app.py
 [ ] Add proper logging setup
@@ -185,7 +185,7 @@ All analysis files are in the rwreader repository root:
 ```
 
 ### Phase 4: Polish (Ongoing)
-```
+```text
 [ ] Add async/await patterns
 [ ] Implement message-based communication
 [ ] CSS styling improvements
@@ -228,23 +228,23 @@ textual run --dev src/rwreader/main.py
 ## References
 
 ### Textual Documentation
-- Official Docs: https://textual.textualize.io/
-- Getting Started: https://textual.textualize.io/getting_started/
-- Reactive Attributes: https://textual.textualize.io/guide/reactivity/
-- Messages: https://textual.textualize.io/guide/messages/
+- Official Docs: <https://textual.textualize.io/>
+- Getting Started: <https://textual.textualize.io/getting_started/>
+- Reactive Attributes: <https://textual.textualize.io/guide/reactivity/>
+- Messages: <https://textual.textualize.io/guide/messages/>
 
 ### Python Testing
-- unittest: https://docs.python.org/3/library/unittest.html
-- pytest: https://docs.pytest.org/
-- unittest.mock: https://docs.python.org/3/library/unittest.mock.html
+- unittest: <https://docs.python.org/3/library/unittest.html>
+- pytest: <https://docs.pytest.org/>
+- unittest.mock: <https://docs.python.org/3/library/unittest.mock.html>
 
 ### Type Checking
-- mypy: https://mypy.readthedocs.io/
+- mypy: <https://mypy.readthedocs.io/>
 
 ### Related Projects
-- Miniflux (Readwise equivalent): https://miniflux.app/
-- Termflux (reference TUI): https://github.com/alexpdp7/termflux
-- Miniflux Python Client: https://github.com/miniflux/python-client
+- Miniflux (Readwise equivalent): <https://miniflux.app/>
+- Termflux (reference TUI): <https://github.com/alexpdp7/termflux>
+- Miniflux Python Client: <https://github.com/miniflux/python-client>
 
 ---
 

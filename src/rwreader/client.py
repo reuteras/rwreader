@@ -14,10 +14,7 @@ from readwise.model import Document
 
 from .exceptions import (
     ArticleError,
-    CacheError,
-    ReadwiseAPIError,
     ReadwiseAuthenticationError,
-    ReadwiseNotFoundError,
     ReadwiseRateLimitError,
     ReadwiseServerError,
 )

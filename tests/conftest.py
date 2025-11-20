@@ -1,6 +1,5 @@
 """Shared pytest fixtures for rwreader tests."""
 
-import os
 from pathlib import Path
 from unittest.mock import Mock
 

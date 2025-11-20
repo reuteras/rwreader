@@ -2,8 +2,6 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from rwreader.utils.ui_helpers import (
     format_article_content,
     safe_get_article_display_title,
@@ -334,7 +332,7 @@ class TestSafeGetArticleDisplayTitle:
     def test_article_with_error_handling(self) -> None:
         """Test error handling in display title creation."""
         # Pass something that will cause an error
-        with patch("rwreader.utils.ui_helpers.logger") as mock_logger:
+        with patch("rwreader.utils.ui_helpers.logger"):
             article = Mock()
             article.get = Mock(side_effect=Exception("Get error"))
             result = safe_get_article_display_title(article)

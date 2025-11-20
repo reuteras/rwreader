@@ -313,7 +313,7 @@ pytest tests/test_client.py::TestReadwiseClient::test_get_articles_success -v
 
 ## 2. UPDATE TEXTUAL VERSION
 
-### Update pyproject.toml
+### Update pyproject.toml for Textual version
 
 ```toml
 # Before:
@@ -564,7 +564,7 @@ class Client:
 
 ## 4. ADD TYPE CHECKING (mypy)
 
-### Update pyproject.toml
+### Update pyproject.toml for mypy configuration
 
 ```toml
 [tool.mypy]

@@ -1,7 +1,5 @@
 """Tests for the cache module."""
 
-import pytest
-
 from rwreader.cache import LimitedSizeDict
 
 
