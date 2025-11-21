@@ -3,8 +3,10 @@
 import logging
 import re
 import webbrowser
+from typing import ClassVar
 
 from textual import on
+from textual.binding import Binding
 from textual.widgets import Markdown, MarkdownViewer
 
 logger: logging.Logger = logging.getLogger(name=__name__)
@@ -25,6 +27,11 @@ ALLOW_IN_FULL_SCREEN: list[str] = [
 
 class LinkableMarkdownViewer(MarkdownViewer):
     """An extended MarkdownViewer that allows web links to be clicked or managed."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("j", "scroll_down", "Scroll down"),
+        ("k", "scroll_up", "Scroll up"),
+    ]
 
     def __init__(self, **kwargs) -> None:
         """Initialize the LinkableMarkdownViewer.
@@ -99,6 +106,16 @@ class LinkableMarkdownViewer(MarkdownViewer):
                 logger.error(
                     msg=f"Failed to set error message in markdown viewer: {nested_e}"
                 )
+
+    def action_scroll_down(self) -> None:
+        """Scroll down in the markdown viewer (j key)."""
+        # Call parent's scroll_down action
+        super().action_scroll_down()
+
+    def action_scroll_up(self) -> None:
+        """Scroll up in the markdown viewer (k key)."""
+        # Call parent's scroll_up action
+        super().action_scroll_up()
 
     @on(message_type=Markdown.LinkClicked)
     def handle_link(self, event: Markdown.LinkClicked) -> None:

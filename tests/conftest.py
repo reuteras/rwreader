@@ -1,5 +1,6 @@
 """Shared pytest fixtures for rwreader tests."""
 
+import logging
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -85,8 +86,6 @@ def sample_config_data():
 @pytest.fixture(autouse=True)
 def reset_logging():
     """Reset logging configuration before each test."""
-    import logging
-
     # Get the root logger
     logger = logging.getLogger()
 

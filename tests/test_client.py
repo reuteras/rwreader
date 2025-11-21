@@ -8,6 +8,19 @@ import pytest
 
 from rwreader.client import ReadwiseClient, create_readwise_client
 
+# Test constants
+CACHE_EXPIRY_SECONDS = 3600
+TIMEOUT_SECONDS = 30
+ARTICLE_COUNT_2 = 2
+ARTICLE_COUNT_3 = 3
+SECONDS_IN_DAY = 86300
+WEEK_DAYS_MIN = 6
+WEEK_DAYS_MAX = 7
+MONTH_DAYS_MIN = 30
+MONTH_DAYS_MAX = 31
+YEAR_DAYS_MIN = 364
+YEAR_DAYS_MAX = 365
+
 
 @pytest.fixture
 def mock_document() -> Mock:
@@ -63,8 +76,8 @@ class TestReadwiseClient:
             client = ReadwiseClient(token="test_token_123")
 
             assert client.token == "test_token_123"
-            assert client._cache_expiry == 3600
-            assert client._timeout == 30
+            assert client._cache_expiry == CACHE_EXPIRY_SECONDS
+            assert client._timeout == TIMEOUT_SECONDS
             assert "inbox" in client._category_cache
             assert "feed" in client._category_cache
             assert "later" in client._category_cache
@@ -85,7 +98,7 @@ class TestReadwiseClient:
 
             articles = client.get_inbox()
 
-            assert len(articles) == 2
+            assert len(articles) == ARTICLE_COUNT_2
             assert articles[0]["id"] == "1"
             # Should not call API since cache is fresh
             mock_api.return_value.get_documents.assert_not_called()
@@ -187,9 +200,9 @@ class TestReadwiseClient:
             mock_api.get_documents.return_value = docs
 
             client = ReadwiseClient(token="test_token")
-            articles = client.get_archive(refresh=True, limit=3)
+            articles = client.get_archive(refresh=True, limit=ARTICLE_COUNT_3)
 
-            assert len(articles) == 3
+            assert len(articles) == ARTICLE_COUNT_3
             assert articles[0]["id"] == "doc_0"
 
     @patch("rwreader.client.ReadwiseReader")
@@ -203,16 +216,16 @@ class TestReadwiseClient:
             day_date = client._get_date_for_timeframe("day")
             # Check within a small margin for timing issues
             assert 0 <= (now - day_date).days <= 1
-            assert (now - day_date).total_seconds() >= 86300  # At least ~23.9 hours
+            assert (now - day_date).total_seconds() >= SECONDS_IN_DAY  # At least ~23.9 hours
 
             week_date = client._get_date_for_timeframe("week")
-            assert 6 <= (now - week_date).days <= 7
+            assert WEEK_DAYS_MIN <= (now - week_date).days <= WEEK_DAYS_MAX
 
             month_date = client._get_date_for_timeframe("month")
-            assert 30 <= (now - month_date).days <= 31
+            assert MONTH_DAYS_MIN <= (now - month_date).days <= MONTH_DAYS_MAX
 
             year_date = client._get_date_for_timeframe("year")
-            assert 364 <= (now - year_date).days <= 365
+            assert YEAR_DAYS_MIN <= (now - year_date).days <= YEAR_DAYS_MAX
 
     @patch("rwreader.client.ReadwiseReader")
     def test_convert_document_to_dict(

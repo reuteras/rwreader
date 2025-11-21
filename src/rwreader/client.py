@@ -496,10 +496,9 @@ class ReadwiseClient:
                         raise ReadwiseRateLimitError(f"Rate limit exceeded fetching content for {article_id}") from http_err
                     elif status_code and status_code >= 500:  # noqa: PLR2004
                         raise ReadwiseServerError(f"Server error fetching content for {article_id}", status_code=status_code) from http_err
-                    else:
-                        # For 404 and other errors, try to use content from original document as fallback
-                        if hasattr(document, "content") and document.content:
-                            article["content"] = document.content
+                    # For 404 and other errors, try to use content from original document as fallback
+                    elif hasattr(document, "content") and document.content:
+                        article["content"] = document.content
                 except Exception as e:
                     logger.error(msg=f"Error fetching HTML content: {e}")
                     # Try to use any content from the original document as fallback

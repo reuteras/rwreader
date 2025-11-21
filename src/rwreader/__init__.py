@@ -14,16 +14,16 @@ from .exceptions import (
 from .main import main
 
 __all__: list[str] = [
-    "main",
-    "RWReaderError",
+    "ArticleError",
+    "CacheError",
     "ConfigurationError",
+    "RWReaderError",
     "ReadwiseAPIError",
     "ReadwiseAuthenticationError",
     "ReadwiseNotFoundError",
     "ReadwiseRateLimitError",
     "ReadwiseServerError",
-    "CacheError",
-    "ArticleError",
+    "main",
 ]
 
 if __name__ == "__main__":
