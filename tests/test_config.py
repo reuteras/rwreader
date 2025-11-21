@@ -9,6 +9,12 @@ import toml
 
 from rwreader.config import DEFAULT_CONFIG, Configuration, get_conf_value
 
+# Test constants
+CACHE_SIZE_SMALL = 5000
+CACHE_SIZE_LARGE = 10000
+READING_WIDTH_SMALL = 80
+READING_WIDTH_LARGE = 100
+
 
 class TestGetConfValue:
     """Test cases for get_conf_value function."""
@@ -68,9 +74,9 @@ class TestConfiguration:
         """Create a temporary config file for testing."""
         config_path = tmp_path / "test_config.toml"
         config_data = {
-            "general": {"cache_size": 5000, "default_theme": "light"},
+            "general": {"cache_size": CACHE_SIZE_SMALL, "default_theme": "light"},
             "readwise": {"token": "test_token_123"},
-            "display": {"font_size": "large", "reading_width": 100},
+            "display": {"font_size": "large", "reading_width": READING_WIDTH_LARGE},
         }
         config_path.write_text(toml.dumps(config_data))
         return config_path
@@ -85,10 +91,10 @@ class TestConfiguration:
         config = Configuration(exec_args=["--config", str(mock_config_file)])
 
         assert config.token == "test_token_123"
-        assert config.cache_size == 5000
+        assert config.cache_size == CACHE_SIZE_SMALL
         assert config.default_theme == "light"
         assert config.font_size == "large"
-        assert config.reading_width == 100
+        assert config.reading_width == READING_WIDTH_LARGE
         assert config.version == "0.1.1"
 
     @patch("rwreader.config.metadata.version")
@@ -110,16 +116,16 @@ class TestConfiguration:
 
         config_path = tmp_path / "test_config_1p.toml"
         config_data = {
-            "general": {"cache_size": 10000, "default_theme": "dark"},
+            "general": {"cache_size": CACHE_SIZE_LARGE, "default_theme": "dark"},
             "readwise": {"token": "op read op://vault/item/token"},
-            "display": {"font_size": "medium", "reading_width": 80},
+            "display": {"font_size": "medium", "reading_width": READING_WIDTH_SMALL},
         }
         config_path.write_text(toml.dumps(config_data))
 
         config = Configuration(exec_args=["--config", str(config_path)])
 
         assert config.token == "1password_secret_token"
-        assert config.cache_size == 10000
+        assert config.cache_size == CACHE_SIZE_LARGE
 
     @patch("rwreader.config.metadata.version")
     def test_configuration_defaults(
@@ -137,15 +143,13 @@ class TestConfiguration:
         config = Configuration(exec_args=["--config", str(config_path)])
 
         assert config.token == "minimal_token"
-        assert config.cache_size == 10000  # Default
+        assert config.cache_size == CACHE_SIZE_LARGE  # Default
         assert config.default_theme == "dark"  # Default
         assert config.font_size == "medium"  # Default
-        assert config.reading_width == 80  # Default
+        assert config.reading_width == READING_WIDTH_SMALL  # Default
 
     @patch("rwreader.config.metadata.version")
-    def test_configuration_version_flag(
-        self, mock_version: MagicMock, capsys
-    ) -> None:
+    def test_configuration_version_flag(self, mock_version: MagicMock, capsys) -> None:
         """Test --version flag."""
         mock_version.return_value = "0.1.1"
 
@@ -237,9 +241,6 @@ class TestConfiguration:
 
         # Create a temporary config instance just to call the method
         with patch("rwreader.config.metadata.version", return_value="0.1.1"):
-            # We need to bypass __init__, so we'll test the method directly
-            from rwreader.config import Configuration
-
             # Create instance with a valid config first
             temp_config_path = tmp_path / "temp.toml"
             temp_data = {"readwise": {"token": "temp"}}

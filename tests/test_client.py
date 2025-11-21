@@ -13,6 +13,7 @@ CACHE_EXPIRY_SECONDS = 3600
 TIMEOUT_SECONDS = 30
 ARTICLE_COUNT_2 = 2
 ARTICLE_COUNT_3 = 3
+ARTICLE_COUNT_5 = 5
 SECONDS_IN_DAY = 86300
 WEEK_DAYS_MIN = 6
 WEEK_DAYS_MAX = 7
@@ -216,7 +217,9 @@ class TestReadwiseClient:
             day_date = client._get_date_for_timeframe("day")
             # Check within a small margin for timing issues
             assert 0 <= (now - day_date).days <= 1
-            assert (now - day_date).total_seconds() >= SECONDS_IN_DAY  # At least ~23.9 hours
+            assert (
+                now - day_date
+            ).total_seconds() >= SECONDS_IN_DAY  # At least ~23.9 hours
 
             week_date = client._get_date_for_timeframe("week")
             assert WEEK_DAYS_MIN <= (now - week_date).days <= WEEK_DAYS_MAX
@@ -450,7 +453,9 @@ class TestReadwiseClient:
             docs = []
             for i in range(3):
                 doc = Mock()
-                doc.first_opened_at = "" if i < 2 else "2024-01-01"  # 2 unread
+                doc.first_opened_at = (
+                    "" if i < ARTICLE_COUNT_2 else "2024-01-01"
+                )  # 2 unread
                 docs.append(doc)
 
             mock_api.get_documents.return_value = docs
@@ -458,7 +463,7 @@ class TestReadwiseClient:
             client = ReadwiseClient(token="test_token")
             count = client.get_feed_count()
 
-            assert count == 2
+            assert count == ARTICLE_COUNT_2
 
     @patch("rwreader.client.ReadwiseReader")
     def test_get_later_count(self, mock_api_class: Mock) -> None:
@@ -474,7 +479,7 @@ class TestReadwiseClient:
             client = ReadwiseClient(token="test_token")
             count = client.get_later_count()
 
-            assert count == 5
+            assert count == ARTICLE_COUNT_5
 
     @patch("rwreader.client.ReadwiseReader")
     def test_close(self, mock_api: Mock) -> None:
@@ -501,7 +506,9 @@ class TestReadwiseClient:
 
             # Populate cache with old timestamp
             client._category_cache["inbox"]["data"] = [{"id": "old"}]
-            client._category_cache["inbox"]["last_updated"] = time.time() - 7200  # 2 hours ago
+            client._category_cache["inbox"]["last_updated"] = (
+                time.time() - 7200
+            )  # 2 hours ago
 
             articles = client.get_inbox()
 

@@ -14,6 +14,19 @@ from rwreader.exceptions import (
     RWReaderError,
 )
 
+# Test constants for HTTP status codes
+HTTP_STATUS_INTERNAL_SERVER_ERROR = 500
+HTTP_STATUS_SERVICE_UNAVAILABLE = 503
+HTTP_STATUS_GATEWAY_TIMEOUT = 504
+HTTP_STATUS_UNAUTHORIZED = 401
+HTTP_STATUS_NOT_FOUND = 404
+HTTP_STATUS_TOO_MANY_REQUESTS = 429
+
+# Test constants for retry values
+RETRY_AFTER_SHORT = 30
+RETRY_AFTER_MEDIUM = 60
+RETRY_AFTER_LONG = 120
+
 
 class TestRWReaderError:
     """Test cases for RWReaderError base exception."""
@@ -53,9 +66,11 @@ class TestReadwiseAPIError:
 
     def test_api_error_with_status_code(self) -> None:
         """Test creating ReadwiseAPIError with status code."""
-        error = ReadwiseAPIError("API error", status_code=500)
+        error = ReadwiseAPIError(
+            "API error", status_code=HTTP_STATUS_INTERNAL_SERVER_ERROR
+        )
         assert str(error) == "API error"
-        assert error.status_code == 500
+        assert error.status_code == HTTP_STATUS_INTERNAL_SERVER_ERROR
 
     def test_api_error_without_status_code(self) -> None:
         """Test creating ReadwiseAPIError without status code."""
@@ -78,19 +93,19 @@ class TestReadwiseAuthenticationError:
         """Test AuthenticationError with default message."""
         error = ReadwiseAuthenticationError()
         assert "Authentication failed" in str(error)
-        assert error.status_code == 401
+        assert error.status_code == HTTP_STATUS_UNAUTHORIZED
 
     def test_auth_error_custom_message(self) -> None:
         """Test AuthenticationError with custom message."""
         error = ReadwiseAuthenticationError("Invalid API token")
         assert str(error) == "Invalid API token"
-        assert error.status_code == 401
+        assert error.status_code == HTTP_STATUS_UNAUTHORIZED
 
     def test_auth_error_raise(self) -> None:
         """Test raising AuthenticationError."""
         with pytest.raises(ReadwiseAuthenticationError) as exc_info:
             raise ReadwiseAuthenticationError("Token expired")
-        assert exc_info.value.status_code == 401
+        assert exc_info.value.status_code == HTTP_STATUS_UNAUTHORIZED
 
 
 class TestReadwiseNotFoundError:
@@ -100,14 +115,14 @@ class TestReadwiseNotFoundError:
         """Test NotFoundError with basic message."""
         error = ReadwiseNotFoundError("Article not found")
         assert str(error) == "Article not found"
-        assert error.status_code == 404
+        assert error.status_code == HTTP_STATUS_NOT_FOUND
         assert error.resource_id is None
 
     def test_not_found_error_with_id(self) -> None:
         """Test NotFoundError with resource ID."""
         error = ReadwiseNotFoundError("Article not found", resource_id="article_123")
         assert str(error) == "Article not found"
-        assert error.status_code == 404
+        assert error.status_code == HTTP_STATUS_NOT_FOUND
         assert error.resource_id == "article_123"
 
     def test_not_found_error_raise(self) -> None:
@@ -124,28 +139,28 @@ class TestReadwiseRateLimitError:
         """Test RateLimitError with default message."""
         error = ReadwiseRateLimitError()
         assert "Rate limit exceeded" in str(error)
-        assert error.status_code == 429
+        assert error.status_code == HTTP_STATUS_TOO_MANY_REQUESTS
         assert error.retry_after is None
 
     def test_rate_limit_error_with_retry(self) -> None:
         """Test RateLimitError with retry_after."""
-        error = ReadwiseRateLimitError(retry_after=60)
-        assert error.status_code == 429
-        assert error.retry_after == 60
+        error = ReadwiseRateLimitError(retry_after=RETRY_AFTER_MEDIUM)
+        assert error.status_code == HTTP_STATUS_TOO_MANY_REQUESTS
+        assert error.retry_after == RETRY_AFTER_MEDIUM
 
     def test_rate_limit_error_custom_message(self) -> None:
         """Test RateLimitError with custom message and retry."""
         error = ReadwiseRateLimitError(
-            "Too many requests", retry_after=120
+            "Too many requests", retry_after=RETRY_AFTER_LONG
         )
         assert str(error) == "Too many requests"
-        assert error.retry_after == 120
+        assert error.retry_after == RETRY_AFTER_LONG
 
     def test_rate_limit_error_raise(self) -> None:
         """Test raising RateLimitError."""
         with pytest.raises(ReadwiseRateLimitError) as exc_info:
-            raise ReadwiseRateLimitError(retry_after=30)
-        assert exc_info.value.retry_after == 30
+            raise ReadwiseRateLimitError(retry_after=RETRY_AFTER_SHORT)
+        assert exc_info.value.retry_after == RETRY_AFTER_SHORT
 
 
 class TestReadwiseServerError:
@@ -155,19 +170,23 @@ class TestReadwiseServerError:
         """Test ServerError with default status code."""
         error = ReadwiseServerError("Internal server error")
         assert str(error) == "Internal server error"
-        assert error.status_code == 500
+        assert error.status_code == HTTP_STATUS_INTERNAL_SERVER_ERROR
 
     def test_server_error_custom_status(self) -> None:
         """Test ServerError with custom status code."""
-        error = ReadwiseServerError("Service unavailable", status_code=503)
+        error = ReadwiseServerError(
+            "Service unavailable", status_code=HTTP_STATUS_SERVICE_UNAVAILABLE
+        )
         assert str(error) == "Service unavailable"
-        assert error.status_code == 503
+        assert error.status_code == HTTP_STATUS_SERVICE_UNAVAILABLE
 
     def test_server_error_raise(self) -> None:
         """Test raising ServerError."""
         with pytest.raises(ReadwiseServerError) as exc_info:
-            raise ReadwiseServerError("Gateway timeout", status_code=504)
-        assert exc_info.value.status_code == 504
+            raise ReadwiseServerError(
+                "Gateway timeout", status_code=HTTP_STATUS_GATEWAY_TIMEOUT
+            )
+        assert exc_info.value.status_code == HTTP_STATUS_GATEWAY_TIMEOUT
 
 
 class TestCacheError:

@@ -6,6 +6,9 @@ from rwreader.utils.markdown_converter import (
     render_html_to_markdown,
 )
 
+# Test constants
+LINK_COUNT_2 = 2
+
 
 class TestRenderHTMLToMarkdown:
     """Test cases for render_html_to_markdown function."""
@@ -99,12 +102,12 @@ class TestExtractLinks:
 
     def test_extract_multiple_links(self) -> None:
         """Test extracting multiple links."""
-        html = '''
+        html = """
         <p><a href="https://example.com">Example</a></p>
         <p><a href="https://test.com">Test</a></p>
-        '''
+        """
         links = extract_links(html)
-        assert len(links) == 2
+        assert len(links) == LINK_COUNT_2
         assert any(link[1] == "https://example.com" for link in links)
         assert any(link[1] == "https://test.com" for link in links)
 
@@ -141,12 +144,12 @@ class TestExtractLinks:
 
     def test_extract_duplicate_links(self) -> None:
         """Test that duplicate links are included."""
-        html = '''
+        html = """
         <a href="https://example.com">First</a>
         <a href="https://example.com">Second</a>
-        '''
+        """
         links = extract_links(html)
-        assert len(links) == 2
+        assert len(links) == LINK_COUNT_2
         assert all(link[1] == "https://example.com" for link in links)
 
 
