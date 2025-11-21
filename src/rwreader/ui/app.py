@@ -1213,6 +1213,9 @@ class RWReader(App[None]):
         if current_focus and hasattr(current_focus, "action_cursor_down"):
             # For normal listviews and other widgets with cursor_down
             current_focus.action_cursor_down()  # type: ignore
+        elif current_focus and hasattr(current_focus, "action_scroll_down"):
+            # For scroll-based widgets like MarkdownViewer
+            current_focus.action_scroll_down()  # type: ignore
         elif current_focus and current_focus.id == "navigation":
             pass
 
@@ -1223,6 +1226,9 @@ class RWReader(App[None]):
         if current_focus and hasattr(current_focus, "action_cursor_up"):
             # For normal listviews and other widgets with cursor_up
             current_focus.action_cursor_up()  # type: ignore
+        elif current_focus and hasattr(current_focus, "action_scroll_up"):
+            # For scroll-based widgets like MarkdownViewer
+            current_focus.action_scroll_up()  # type: ignore
         elif current_focus and current_focus.id == "navigation":
             pass
 
