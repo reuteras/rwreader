@@ -53,17 +53,17 @@ class LinkSelectionScreen(ModalScreen):
         else:
             title = "Select a link (ESC to go back):"
 
-        yield Label(renderable=title)
+        yield Label(title)
 
         # Handle empty links list
         if not self.links:
-            yield Label(renderable="No links found in article")
+            yield Label("No links found in article")
             return
 
         # Create a list view with all links
         link_select = ListView(
             *[
-                ListItem(Label(renderable=self._format_link_item(link=link)))
+                ListItem(Label(self._format_link_item(link=link)))
                 for link in self.links
             ],
             id="link-list",
