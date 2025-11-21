@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rwreader"
-version = "0.1.1"
+version = "0.1.2"
 description = "A terminal user interface for Readwise Reader"
 authors = [
     {name = "Peter Reuterås", email = "peter@reuteras.net"},
@@ -31,7 +31,6 @@ classifiers = [
 dependencies = [
     "textual>=6.0.0",
     "httpx>=0.24.0",
-    "toml>=0.10.2",
     "rich>=13.3.5",
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
@@ -61,7 +60,6 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "mypy>=1.8.0",
     "types-requests>=2.31.0",
-    "types-toml>=0.10.8",
 ]
 
 [tool.ruff]

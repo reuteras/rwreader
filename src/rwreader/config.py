@@ -4,11 +4,10 @@ import argparse
 import logging
 import subprocess
 import sys
+import tomllib
 from importlib import metadata
 from pathlib import Path
 from typing import Any
-
-import toml
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -212,8 +211,8 @@ class Configuration:
                 )
                 sys.exit(1)
 
-            return toml.loads(s=config_path.read_text())
-        except (FileNotFoundError, toml.TomlDecodeError) as err:
+            return tomllib.loads(config_path.read_text())
+        except (FileNotFoundError, tomllib.TOMLDecodeError) as err:
             logger.error(msg=f"Error reading configuration file: {err}")
             print(f"Error reading configuration file: {err}")
             sys.exit(1)
