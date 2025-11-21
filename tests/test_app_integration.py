@@ -1,10 +1,8 @@
 """Integration tests for rwreader TUI application."""
 
 from unittest.mock import AsyncMock, Mock, patch
-from typing import Any
 
 import pytest
-from textual.pilot import Pilot
 
 from rwreader.ui.app import RWReader
 

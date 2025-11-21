@@ -272,7 +272,7 @@ class LinkSelectionScreen(ModalScreen):
             self.app.push_screen(screen="progress")
 
             # Save to Readwise
-            response: tuple[bool, PostResponse] = readwise.save_document(url=link) # type: ignore
+            response: tuple[bool, PostResponse] = readwise.save_document(url=link)  # type: ignore
 
             # Remove progress screen
             self.app.pop_screen()

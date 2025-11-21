@@ -286,19 +286,38 @@ class ReadwiseClient:
                 logger.error(msg=f"Error in get_documents for {cache_key}: {e}")
 
                 # Check for specific error types that should raise exceptions
-                if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
-                    raise ReadwiseAuthenticationError(f"Authentication failed for {cache_key}: {e}") from e
+                if (
+                    "401" in error_msg
+                    or "unauthorized" in error_msg
+                    or "authentication" in error_msg
+                ):
+                    raise ReadwiseAuthenticationError(
+                        f"Authentication failed for {cache_key}: {e}"
+                    ) from e
                 elif "429" in error_msg or "rate limit" in error_msg:
-                    raise ReadwiseRateLimitError(f"Rate limit exceeded for {cache_key}: {e}") from e
-                elif "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
-                    raise ReadwiseServerError(f"Readwise server error for {cache_key}: {e}") from e
+                    raise ReadwiseRateLimitError(
+                        f"Rate limit exceeded for {cache_key}: {e}"
+                    ) from e
+                elif (
+                    "500" in error_msg
+                    or "502" in error_msg
+                    or "503" in error_msg
+                    or "server error" in error_msg
+                ):
+                    raise ReadwiseServerError(
+                        f"Readwise server error for {cache_key}: {e}"
+                    ) from e
                 else:
                     # For non-critical errors (404, network issues, etc.), return cached data (even if empty)
                     # This preserves backward compatibility
                     data = cast(list[dict[str, Any]], cache["data"])
                     return data[:limit] if limit else data
 
-        except (ReadwiseAuthenticationError, ReadwiseRateLimitError, ReadwiseServerError):
+        except (
+            ReadwiseAuthenticationError,
+            ReadwiseRateLimitError,
+            ReadwiseServerError,
+        ):
             # Re-raise critical exceptions
             raise
         except Exception as e:
@@ -364,7 +383,9 @@ class ReadwiseClient:
                     f"Severe error in fallback dictionary creation: {nested_e}"
                 )
                 # Raise ArticleError if we can't even create a fallback
-                raise ArticleError(f"Failed to convert document to dictionary: {e}") from e
+                raise ArticleError(
+                    f"Failed to convert document to dictionary: {e}"
+                ) from e
 
     def get_article(self, article_id: str) -> dict[str, Any] | None:  # noqa: PLR0912, PLR0915
         """Get full article content with enhanced debugging.
@@ -392,12 +413,27 @@ class ReadwiseClient:
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
 
                 # Check for critical error types only
-                if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
-                    raise ReadwiseAuthenticationError(f"Authentication failed getting article {article_id}: {doc_error}") from doc_error
+                if (
+                    "401" in error_msg
+                    or "unauthorized" in error_msg
+                    or "authentication" in error_msg
+                ):
+                    raise ReadwiseAuthenticationError(
+                        f"Authentication failed getting article {article_id}: {doc_error}"
+                    ) from doc_error
                 elif "429" in error_msg or "rate limit" in error_msg:
-                    raise ReadwiseRateLimitError(f"Rate limit exceeded getting article {article_id}: {doc_error}") from doc_error
-                elif "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
-                    raise ReadwiseServerError(f"Readwise server error getting article {article_id}: {doc_error}") from doc_error
+                    raise ReadwiseRateLimitError(
+                        f"Rate limit exceeded getting article {article_id}: {doc_error}"
+                    ) from doc_error
+                elif (
+                    "500" in error_msg
+                    or "502" in error_msg
+                    or "503" in error_msg
+                    or "server error" in error_msg
+                ):
+                    raise ReadwiseServerError(
+                        f"Readwise server error getting article {article_id}: {doc_error}"
+                    ) from doc_error
                 # For 404 and other errors, let document remain None and return None below
 
             if document:
@@ -487,15 +523,24 @@ class ReadwiseClient:
 
                 except requests.HTTPError as http_err:
                     # Handle critical HTTP errors only
-                    status_code = http_err.response.status_code if http_err.response else None
+                    status_code = (
+                        http_err.response.status_code if http_err.response else None
+                    )
                     logger.error(msg=f"HTTP error fetching article content: {http_err}")
 
                     if status_code == 401:  # noqa: PLR2004
-                        raise ReadwiseAuthenticationError(f"Authentication failed getting content for {article_id}") from http_err
+                        raise ReadwiseAuthenticationError(
+                            f"Authentication failed getting content for {article_id}"
+                        ) from http_err
                     elif status_code == 429:  # noqa: PLR2004
-                        raise ReadwiseRateLimitError(f"Rate limit exceeded fetching content for {article_id}") from http_err
+                        raise ReadwiseRateLimitError(
+                            f"Rate limit exceeded fetching content for {article_id}"
+                        ) from http_err
                     elif status_code and status_code >= 500:  # noqa: PLR2004
-                        raise ReadwiseServerError(f"Server error fetching content for {article_id}", status_code=status_code) from http_err
+                        raise ReadwiseServerError(
+                            f"Server error fetching content for {article_id}",
+                            status_code=status_code,
+                        ) from http_err
                     # For 404 and other errors, try to use content from original document as fallback
                     elif hasattr(document, "content") and document.content:
                         article["content"] = document.content

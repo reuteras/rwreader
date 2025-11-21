@@ -114,7 +114,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
                 return f"*Error rendering HTML content properly. Raw HTML shown below:*\n\n```html\n{html_content}\n```"
             else:
                 return f"*Error rendering content: {e}*\n\n{text}"
-        except: # noqa E722
+        except:  # noqa E722
             # Ultimate fallback: show the raw HTML
             return f"*Error processing content. Raw HTML shown below:*\n\n```html\n{html_content}\n```"
 

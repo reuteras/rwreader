@@ -167,7 +167,11 @@ class TestFormatArticleContent:
         result = format_article_content(article)
         assert "Alt Fields Article" in result
         # The markdown conversion will escape underscores
-        assert "full_html" in result or "full\\_html" in result or "Content from full" in result
+        assert (
+            "full_html" in result
+            or "full\\_html" in result
+            or "Content from full" in result
+        )
 
     def test_article_with_source_url(self) -> None:
         """Test article with source_url instead of url."""
@@ -275,7 +279,9 @@ class TestFormatArticleContent:
     def test_article_formatting_exception_handling(self) -> None:
         """Test overall exception handling in format_article_content."""
         # Pass something that will cause an error
-        with patch("rwreader.utils.ui_helpers.escape_markdown_formatting") as mock_escape:
+        with patch(
+            "rwreader.utils.ui_helpers.escape_markdown_formatting"
+        ) as mock_escape:
             mock_escape.side_effect = Exception("Formatting error")
             article = {"title": "Error Article"}
             result = format_article_content(article)

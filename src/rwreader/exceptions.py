@@ -30,7 +30,9 @@ class ReadwiseAPIError(RWReaderError):
 class ReadwiseAuthenticationError(ReadwiseAPIError):
     """Raised when authentication fails (401)."""
 
-    def __init__(self, message: str = "Authentication failed. Check your API token.") -> None:
+    def __init__(
+        self, message: str = "Authentication failed. Check your API token."
+    ) -> None:
         """Initialize ReadwiseAuthenticationError.
 
         Args:
