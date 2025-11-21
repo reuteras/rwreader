@@ -940,10 +940,12 @@ class RWReader(App[None]):
                     if category and category in counts:
                         count = counts[category]
                         category_name = category.capitalize()
+                        # Add arrow prefix for library items (inbox, later, archive)
+                        prefix = "→ " if category in ("inbox", "later", "archive") else ""
                         if count >= 0:
-                            new_content = f"{category_name} ({count})"
+                            new_content = f"{prefix}{category_name} ({count})"
                         else:
-                            new_content = f"{category_name} (...)"
+                            new_content = f"{prefix}{category_name} (...)"
 
                         # Update the text
                         static_widget = item.children[0] if item.children else None
