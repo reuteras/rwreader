@@ -186,14 +186,14 @@ class RWReader(App[None]):
         )
 
         # Add category items with data attributes - disable markup
-        inbox_item = ListItem(Static(content="Inbox (...)", markup=False), id="nav_inbox")
+        inbox_item = ListItem(Static(content="  Inbox (...)", markup=False), id="nav_inbox")
         inbox_item.data = {"category": "inbox"}  # type: ignore
 
-        later_item = ListItem(Static(content="Later (...)", markup=False), id="nav_later")
+        later_item = ListItem(Static(content="  Later (...)", markup=False), id="nav_later")
         later_item.data = {"category": "later"}  # type: ignore
 
         archive_item = ListItem(
-            Static(content="Archive (...)", markup=False), id="nav_archive"
+            Static(content="  Archive (...)", markup=False), id="nav_archive"
         )
         archive_item.data = {"category": "archive"}  # type: ignore
 
