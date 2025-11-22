@@ -197,7 +197,7 @@ class RWReader(App[None]):
         later_item.data = {"category": "later"}  # type: ignore
 
         archive_item = ListItem(
-            Static(content="→ Archive (...)", markup=False), id="nav_archive"
+            Static(content="→ Archive", markup=False), id="nav_archive"
         )
         archive_item.data = {"category": "archive"}  # type: ignore
 
@@ -931,9 +931,6 @@ class RWReader(App[None]):
                 later_data = self.client._category_cache.get("later", {}).get(
                     "data", []
                 )
-                archive_data = self.client._category_cache.get("archive", {}).get(
-                    "data", []
-                )
 
                 # Get counts for each category
                 counts["inbox"] = self._get_category_count("inbox", inbox_data)
@@ -941,7 +938,6 @@ class RWReader(App[None]):
                     "feed", feed_data, count_unread=True
                 )
                 counts["later"] = self._get_category_count("later", later_data)
-                counts["archive"] = self._get_category_count("archive", archive_data)
 
             except Exception as e:
                 logger.error(f"Error getting counts: {e}")
@@ -950,29 +946,33 @@ class RWReader(App[None]):
                     "inbox": self.items_loaded.get("inbox", 0),
                     "feed": self.items_loaded.get("feed", 0),
                     "later": self.items_loaded.get("later", 0),
-                    "archive": self.items_loaded.get("archive", 0),
                 }
 
             # Update navigation items
             for item in nav_list.children:
                 if hasattr(item, "id") and hasattr(item, "data") and item.data:  # type: ignore
                     category = item.data["category"]  # type: ignore
-                    if category and category in counts:
-                        count = counts[category]
-                        category_name = category.capitalize()
-                        # Add arrow prefix for library items (inbox, later, archive)
-                        prefix = (
-                            "→ " if category in ("inbox", "later", "archive") else ""
-                        )
-                        if count >= 0:
-                            new_content = f"{prefix}{category_name} ({count})"
-                        else:
-                            new_content = f"{prefix}{category_name} (...)"
+                    if category:
+                        # Skip archive as it has no counter
+                        if category == "archive":
+                            continue
+                        # Update other categories with counts
+                        if category in counts:
+                            count = counts[category]
+                            category_name = category.capitalize()
+                            # Add arrow prefix for library items (inbox, later)
+                            prefix = (
+                                "→ " if category in ("inbox", "later") else ""
+                            )
+                            if count >= 0:
+                                new_content = f"{prefix}{category_name} ({count})"
+                            else:
+                                new_content = f"{prefix}{category_name} (...)"
 
-                        # Update the text
-                        static_widget = item.children[0] if item.children else None
-                        if static_widget and hasattr(static_widget, "update"):
-                            static_widget.update(new_content)  # type: ignore
+                            # Update the text
+                            static_widget = item.children[0] if item.children else None
+                            if static_widget and hasattr(static_widget, "update"):
+                                static_widget.update(new_content)  # type: ignore
 
         except Exception as e:
             logger.error(f"Error updating navigation counts: {e}")
@@ -1424,6 +1424,25 @@ class RWReader(App[None]):
             if initial_load:
                 # Update navigation counts after loading
                 await self.update_navigation_counts()
+
+                # For feed and later, immediately update background counts with fresh data
+                # to ensure the count is current and not stale from background timer
+                if category in ("feed", "later"):
+                    try:
+                        if category == "feed":
+                            new_count = self.client.get_feed_count()
+                        else:  # later
+                            new_count = self.client.get_later_count()
+
+                        # Update background counts immediately
+                        self.background_counts[category] = new_count
+                        logger.debug(
+                            f"Updated background count for {category} to {new_count}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error updating background count for {category}: {e}"
+                        )
         except Exception as e:
             logger.error(msg=f"Error loading category {category}: {e}")
             self.notify(message=f"Error: {e}", title="Error", severity="error")
