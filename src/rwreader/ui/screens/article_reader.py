@@ -79,7 +79,7 @@ class ArticleReaderScreen(Screen):
 
     async def on_mount(self) -> None:
         """Load article content when screen mounts."""
-        await self.load_article_content()
+        self.load_article_content()
 
     @work(exclusive=True)
     async def load_article_content(self) -> None:

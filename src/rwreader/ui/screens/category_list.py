@@ -49,7 +49,7 @@ class CategoryListScreen(Screen):
 
     async def on_mount(self) -> None:
         """Load categories when screen mounts."""
-        await self.load_categories()
+        self.load_categories()
 
     @work(exclusive=True)
     async def load_categories(self) -> None:
@@ -151,12 +151,12 @@ class CategoryListScreen(Screen):
 
                     self.app.push_screen(ArticleListScreen(category=category))
 
-    async def action_refresh(self) -> None:
+    def action_refresh(self) -> None:
         """Refresh category counts."""
         # Clear the client cache
         if hasattr(self.app, "client"):
             self.app.client.clear_cache()  # type: ignore
-        await self.load_categories()
+        self.load_categories()
         self.notify("Categories refreshed", title="Refresh")
 
     def action_help(self) -> None:

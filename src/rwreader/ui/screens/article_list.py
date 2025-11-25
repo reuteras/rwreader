@@ -61,7 +61,7 @@ class ArticleListScreen(Screen):
 
     async def on_mount(self) -> None:
         """Load articles when screen mounts."""
-        await self.load_articles()
+        self.load_articles()
 
     @work(exclusive=True)
     async def load_articles(self, load_more: bool = False) -> None:
@@ -301,16 +301,16 @@ class ArticleListScreen(Screen):
         else:
             self.notify("No URL available", severity="warning")
 
-    async def action_refresh(self) -> None:
+    def action_refresh(self) -> None:
         """Refresh articles."""
         if hasattr(self.app, "client"):
             self.app.client.clear_cache()  # type: ignore
-        await self.load_articles(load_more=False)
+        self.load_articles(load_more=False)
         self.notify("Articles refreshed", title="Refresh")
 
-    async def action_load_more(self) -> None:
+    def action_load_more(self) -> None:
         """Load more articles."""
-        await self.load_articles(load_more=True)
+        self.load_articles(load_more=True)
 
     def action_back(self) -> None:
         """Go back to category list."""
