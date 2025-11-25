@@ -107,7 +107,6 @@ docstring-code-format = false
 docstring-code-line-length = "dynamic"
 
 [tool.uv.sources]
-ttrss-python = { git = "https://github.com/reuteras/ttrss-python.git" }
 readwise-api = { git = "https://github.com/reuteras/readwise-api.git" }
 
 [tool.ruff.lint.pydocstyle]
