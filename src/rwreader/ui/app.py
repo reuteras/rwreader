@@ -7,6 +7,7 @@ import sys
 import webbrowser
 from pathlib import PurePath
 from typing import Any, ClassVar, Final, Literal
+from urllib.parse import quote
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -27,6 +28,11 @@ from textual.widgets import (
 # Import our improved client
 from ..client import ReadwiseClient, create_readwise_client
 from ..config import Configuration
+from ..utils.markdown_converter import (
+    download_and_convert_html,
+    escape_markdown_formatting,
+    format_timestamp,
+)
 from ..utils.ui_helpers import (
     format_article_content,
     safe_get_article_display_title,
@@ -36,6 +42,7 @@ from .screens.confirm import DeleteArticleScreen
 from .screens.fullscreen import FullScreenMarkdown
 from .screens.help import HelpScreen
 from .screens.link_screens import LinkSelectionScreen
+from .screens.save_improved import SaveImprovedScreen
 from .widgets.api_status import APIStatusWidget
 from .widgets.linkable_markdown_viewer import LinkableMarkdownViewer
 from .widgets.load_more import LoadMoreWidget
@@ -67,6 +74,9 @@ class RWReader(App[None]):
         ("m", "show_metadata", "Show metadata"),
         ("M", "maximize_content", "Maximize content"),
         ("D", "delete_article", "Delete article"),
+        ("r", "redownload_html_service", "Re-download via service"),
+        ("R", "redownload_html_direct", "Re-download directly"),
+        ("S", "save_improved_to_readwise", "Save improved to Readwise"),
         # Link actions
         ("ctrl+o", "open_links", "Open article links"),
         ("ctrl+s", "save_link", "Save article link"),
@@ -92,6 +102,7 @@ class RWReader(App[None]):
         "maximize_content": FullScreenMarkdown,
         "help": HelpScreen,
         "open_links": LinkSelectionScreen,
+        "save_improved": SaveImprovedScreen,
     }
 
     CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
@@ -876,6 +887,369 @@ class RWReader(App[None]):
                 message=f"Error showing metadata: {e}", title="Error", severity="error"
             )
 
+    def _build_redownload_header(
+        self, article: dict[str, Any], method: str, original_url: str
+    ) -> str:
+        """Build header with metadata for re-downloaded content.
+
+        Args:
+            article: The article data dictionary
+            method: Conversion method used ("service" or "direct")
+            original_url: The original article URL that was downloaded
+
+        Returns:
+            Formatted header markdown
+        """
+        title: str = article.get("title", "Untitled")
+        author: str = article.get("author", article.get("creator", ""))
+        site_name: str = article.get("site_name", article.get("domain", ""))
+        published_date: str = article.get("published_date", "")
+
+        # Format header with metadata
+        header: str = f"# {escape_markdown_formatting(text=title)}\n\n"
+
+        # Add metadata
+        metadata: list[str] = []
+        if author:
+            metadata.append(f"*By {escape_markdown_formatting(author)}*")
+        if site_name:
+            metadata.append(f"*From {escape_markdown_formatting(site_name)}*")
+        if published_date:
+            metadata.append(f"*Published: {format_timestamp(published_date)}*")
+
+        method_name = "service" if method == "service" else "direct download"
+        metadata.append(f"*[Re-downloaded via {method_name}]*")
+
+        if metadata:
+            header += " | ".join(metadata) + "\n\n"
+
+        # Include both the original article URL and Readwise reader URL for context
+        readwise_url: str | None = article.get("url")
+        if original_url:
+            header += f"*[Original Article]({original_url})*"
+            if readwise_url and readwise_url != original_url:
+                header += f" | *[Readwise Reader]({readwise_url})*"
+            header += "\n\n"
+
+        header += "---\n\n"
+        return header
+
+    async def _redownload_html_with_method(self, method: str) -> None:
+        """Re-download and convert HTML for the current article using specified method.
+
+        Args:
+            method: Conversion method - "service" or "direct"
+        """
+        # Check if HTML redownload feature is enabled
+        if not self.configuration.html_redownload_enabled:
+            self.notify(
+                message="HTML redownload feature is disabled",
+                title="Feature Disabled",
+                severity="warning",
+            )
+            return
+
+        # Make sure we have an article loaded
+        if not self.current_article_id or not self.current_article:
+            self.notify(
+                message="No article selected", title="Error", severity="warning"
+            )
+            return
+
+        # Get the original article URL (source_url is the original, url is Readwise reader)
+        url: str | None = self.current_article.get("source_url")
+        if not url:
+            # Fallback to url if source_url is not available
+            url = self.current_article.get("url")
+        if not url:
+            self.notify(
+                message="No original article URL available for this article",
+                title="Error",
+                severity="warning",
+            )
+            return
+
+        # Show loading status
+        content_view: LinkableMarkdownViewer = self.query_one(
+            selector="#content", expect_type=LinkableMarkdownViewer
+        )
+        method_name = "service" if method == "service" else "direct download"
+        content_view.update_content(
+            markdown=f"# Re-downloading HTML ({method_name})...\n\nPlease wait while we fetch the original HTML content..."
+        )
+
+        try:
+            # Download and convert HTML
+            converted_markdown = await download_and_convert_html(
+                url=url,
+                method=method,
+                service_url=self.configuration.html_redownload_service_url,
+            )
+
+            # Build header with metadata
+            header = self._build_redownload_header(
+                article=self.current_article, method=method, original_url=url
+            )
+
+            # Combine header with converted content
+            final_markdown = header + converted_markdown
+
+            # Update the display
+            self.content_markdown = final_markdown
+            content_view.update_content(markdown=final_markdown)
+
+            self.notify(
+                message=f"HTML successfully re-downloaded via {method_name}",
+                title="Success",
+            )
+
+        except ValueError as e:
+            logger.error(msg=f"Invalid configuration for HTML redownload: {e}")
+            self.notify(
+                message=f"Configuration error: {e}",
+                title="Error",
+                severity="error",
+            )
+            content_view.update_content(markdown=f"# Error\n\nConfiguration error: {e}")
+        except Exception as e:
+            logger.error(msg=f"Error re-downloading HTML: {e}")
+            self.notify(
+                message=f"Error downloading HTML: {e}",
+                title="Error",
+                severity="error",
+            )
+            content_view.update_content(
+                markdown=f"# Error Re-downloading HTML\n\nThere was an error downloading the HTML from the original source.\n\n**Error details:** {e}\n\nTry opening the article in your browser instead."
+            )
+
+    async def action_redownload_html_service(self) -> None:
+        """Re-download HTML using external service."""
+        await self._redownload_html_with_method(method="service")
+
+    async def action_redownload_html_direct(self) -> None:
+        """Re-download HTML using direct download."""
+        await self._redownload_html_with_method(method="direct")
+
+    def _append_query_param(self, url: str, param: str, value: str) -> str:
+        """Append query parameter to URL, handling existing parameters.
+
+        Args:
+            url: Base URL
+            param: Query parameter name
+            value: Query parameter value
+
+        Returns:
+            URL with appended/updated query parameter
+
+        Examples:
+            _append_query_param("https://example.com/article", "source", "rwreader")
+            # Returns: "https://example.com/article?source=rwreader"
+
+            _append_query_param("https://example.com/article?id=123", "source", "rwreader")
+            # Returns: "https://example.com/article?id=123&source=rwreader"
+        """
+        separator = "&" if "?" in url else "?"
+        return f"{url}{separator}{param}={quote(value)}"
+
+    async def _markdown_to_html(self, markdown: str) -> str:
+        """Convert markdown to HTML for saving to Readwise.
+
+        Simple conversion that preserves the markdown structure as HTML.
+
+        Args:
+            markdown: Markdown content
+
+        Returns:
+            HTML representation of the markdown
+        """
+        html = markdown
+
+        # H1-H6 headings
+        html = re.sub(r"^# (.*?)$", r"<h1>\1</h1>", html, flags=re.MULTILINE)
+        html = re.sub(r"^## (.*?)$", r"<h2>\1</h2>", html, flags=re.MULTILINE)
+        html = re.sub(r"^### (.*?)$", r"<h3>\1</h3>", html, flags=re.MULTILINE)
+        html = re.sub(r"^#### (.*?)$", r"<h4>\1</h4>", html, flags=re.MULTILINE)
+        html = re.sub(r"^##### (.*?)$", r"<h5>\1</h5>", html, flags=re.MULTILINE)
+        html = re.sub(r"^###### (.*?)$", r"<h6>\1</h6>", html, flags=re.MULTILINE)
+
+        # Bold and italic
+        html = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", html)
+        html = re.sub(r"\*(.*?)\*", r"<em>\1</em>", html)
+
+        # Links
+        html = re.sub(r"\[(.*?)\]\((.*?)\)", r'<a href="\2">\1</a>', html)
+
+        # Code blocks
+        html = re.sub(
+            r"```(.*?)```", r"<pre><code>\1</code></pre>", html, flags=re.DOTALL
+        )
+
+        # Inline code
+        html = re.sub(r"`(.*?)`", r"<code>\1</code>", html)
+
+        # Paragraphs (double newlines = paragraph break)
+        html = re.sub(r"\n\n+", "</p><p>", html)
+        html = f"<p>{html}</p>"
+
+        return html
+
+    def action_save_improved_to_readwise(self) -> None:
+        """Save the current re-downloaded article as a new document in Readwise."""
+        self._save_improved_worker()
+
+    @work(exclusive=True)
+    async def _save_improved_worker(self) -> None:
+        """Worker task to handle saving improved version to Readwise."""
+        # Check if feature is enabled
+        if not self.configuration.allow_save_to_readwise:
+            self.notify(
+                message="Save to Readwise feature is disabled",
+                title="Feature Disabled",
+                severity="warning",
+            )
+            return
+
+        # Check prerequisites
+        if not self.current_article_id or not self.current_article:
+            self.notify(
+                message="No article selected", title="Error", severity="warning"
+            )
+            return
+
+        # Only allow saving if we have content_markdown
+        if not self.content_markdown or self.content_markdown.startswith("# Welcome"):
+            self.notify(
+                message="No content to save. Load an article first.",
+                title="Error",
+                severity="warning",
+            )
+            return
+
+        # Get the original article URL
+        original_url: str | None = self.current_article.get("source_url")
+        if not original_url:
+            original_url = self.current_article.get("url")
+        if not original_url:
+            self.notify(
+                message="No URL available for this article",
+                title="Error",
+                severity="warning",
+            )
+            return
+
+        # Get original Readwise document URL for linking
+        readwise_doc_id = self.current_article.get("id")
+        readwise_url = f"https://readwise.io/reader/document/{readwise_doc_id}"
+
+        # Build summary linking to original
+        original_title = self.current_article.get("title", "Unknown")
+        summary = f"Improved version of: [{original_title}]({readwise_url})"
+
+        # Show confirmation dialog
+        dialog = SaveImprovedScreen(
+            original_url=original_url,
+            readwise_url=readwise_url,
+            content_preview=self.content_markdown,
+        )
+        result = await self.push_screen_wait(screen=dialog)
+
+        # Check if user confirmed
+        if not result or not result.get("confirmed"):
+            return
+
+        # Now save to Readwise
+        await self._save_improved_to_readwise(
+            original_url=original_url,
+            readwise_url=readwise_url,
+            summary=summary,
+        )
+
+    async def _save_improved_to_readwise(
+        self,
+        original_url: str,
+        readwise_url: str,
+        summary: str,
+    ) -> None:
+        """Save the improved content as a new Readwise document.
+
+        Args:
+            original_url: Original article source URL
+            readwise_url: Link to original Readwise document
+            summary: Summary text linking to original
+        """
+        try:
+            # Convert markdown to HTML
+            html_content = await self._markdown_to_html(self.content_markdown)
+
+            # Build modified URL with identifier
+            modified_url = self._append_query_param(
+                original_url,
+                "source",
+                "rwreader-improved",
+            )
+
+            # Show loading notification
+            self.notify(
+                message="Saving improved version to Readwise...",
+                title="Saving",
+            )
+
+            # Save to Readwise using the extended API
+            loop = asyncio.get_event_loop()
+            success, response = await asyncio.wait_for(
+                fut=loop.run_in_executor(
+                    executor=None,
+                    func=lambda: self.client.save_document(
+                        url=modified_url,
+                        html=html_content,
+                        title=self.current_article.get("title"),
+                        author=self.current_article.get("author"),
+                        summary=summary,
+                        published_date=self.current_article.get("published_date"),
+                        location="new",
+                        category="article",
+                        saved_using="rwreader-html-redownload",
+                        tags=["rwreader", "improved"],
+                        should_clean_html=False,
+                    ),
+                ),
+                timeout=30,
+            )
+
+            if success and response:
+                new_doc_id = response.id
+                reader_url = response.url
+                self.notify(
+                    message=f"Saved! View at: {reader_url}",
+                    title="Success",
+                    timeout=10,
+                )
+                logger.info(
+                    msg=f"Successfully saved improved version as document {new_doc_id}"
+                )
+            else:
+                self.notify(
+                    message="Failed to save to Readwise",
+                    title="Error",
+                    severity="error",
+                )
+                logger.error(msg=f"Failed to save improved version: {response}")
+
+        except TimeoutError:
+            logger.error(msg="Timeout saving improved version to Readwise")
+            self.notify(
+                message="Timeout saving to Readwise. Please try again.",
+                title="Error",
+                severity="error",
+            )
+        except Exception as e:
+            logger.error(msg=f"Error saving improved version: {e}", exc_info=True)
+            self.notify(
+                message=f"Error saving to Readwise: {e}",
+                title="Error",
+                severity="error",
+            )
+
     def action_clear(self) -> None:
         """Clear the content view."""
         self.content_markdown = (
@@ -961,9 +1335,7 @@ class RWReader(App[None]):
                             count = counts[category]
                             category_name = category.capitalize()
                             # Add arrow prefix for library items (inbox, later)
-                            prefix = (
-                                "→ " if category in ("inbox", "later") else ""
-                            )
+                            prefix = "→ " if category in ("inbox", "later") else ""
                             if count >= 0:
                                 new_content = f"{prefix}{category_name} ({count})"
                             else:

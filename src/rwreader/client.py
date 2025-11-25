@@ -5,6 +5,8 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
+from types import SimpleNamespace
 from typing import Any, cast
 
 import readwise
@@ -812,6 +814,113 @@ class ReadwiseClient:
         except Exception as e:
             logger.error(f"Error getting later count: {e}")
             return 0
+
+    def save_document(  # noqa: PLR0913, PLR0912
+        self,
+        url: str,
+        html: str | None = None,
+        title: str | None = None,
+        author: str | None = None,
+        summary: str | None = None,
+        published_date: str | None = None,
+        image_url: str | None = None,
+        location: str | None = None,
+        category: str | None = None,
+        saved_using: str | None = None,
+        tags: list[str] | None = None,
+        notes: str | None = None,
+        should_clean_html: bool = False,
+    ) -> tuple[bool, Any]:
+        """Save a document to Readwise Reader.
+
+        Args:
+            url: Document URL (required). Can include query parameters.
+            html: Custom HTML content to save. If provided, Readwise uses this
+                  instead of scraping the URL. Optional.
+            title: Override document title. Optional.
+            author: Override document author. Optional.
+            summary: Document summary/description. Optional.
+            published_date: ISO 8601 formatted publication date. Optional.
+            image_url: Cover/thumbnail image URL. Optional.
+            location: Initial location in Readwise. One of: "new", "later",
+                      "archive", "feed". Optional, defaults to "new".
+            category: Document type. One of: "article", "email", "rss",
+                      "highlight", "note", "pdf", "epub", "tweet", "video".
+                      Optional.
+            saved_using: String identifying the source/tool that saved this.
+                         Example: "rwreader-html-redownload". Optional.
+            tags: List of tag strings to apply. Optional.
+            notes: Top-level document note. Optional.
+            should_clean_html: Whether Readwise should auto-clean the provided HTML.
+                              Only used if html is provided. Defaults to False.
+
+        Returns:
+            Tuple of (success: bool, response: PostResponse)
+        """
+        try:
+            logger.debug(msg="Saving document to Readwise using direct HTTP request")
+            # Build the payload manually to avoid validation issues
+            payload_dict: dict[str, Any] = {"url": url}
+
+            if html is not None:
+                payload_dict["html"] = html
+                payload_dict["should_clean_html"] = should_clean_html
+            if title is not None:
+                payload_dict["title"] = title
+            if author is not None:
+                payload_dict["author"] = author
+            if summary is not None:
+                payload_dict["summary"] = summary
+            if published_date is not None:
+                payload_dict["published_date"] = published_date
+            if image_url is not None:
+                payload_dict["image_url"] = image_url
+            if location is not None:
+                payload_dict["location"] = location
+            if category is not None:
+                payload_dict["category"] = category
+            if saved_using is not None:
+                payload_dict["saved_using"] = saved_using
+            if tags is not None:
+                payload_dict["tags"] = tags
+            if notes is not None:
+                payload_dict["notes"] = notes
+
+            # Make the direct HTTP request to avoid the readwise-api validation issues
+            http_response: requests.Response = requests.post(
+                url=f"{self._api.URL_BASE}/save/",
+                headers={"Authorization": f"Token {self.token}"},
+                json=payload_dict,
+                timeout=self._timeout,
+            )
+
+            logger.debug(msg=f"Readwise API response status: {http_response.status_code}")
+
+            # Check response status - both 200 (OK) and 201 (Created) are success
+            if http_response.status_code in (HTTPStatus.OK, HTTPStatus.CREATED):
+                response_data = http_response.json()
+                # Create a simple object with id and url attributes
+                response = SimpleNamespace(id=response_data.get("id"), url=response_data.get("url"))
+                logger.info(msg=f"Successfully saved document with ID: {response.id}")
+                self._invalidate_cache()
+                return True, response
+            else:
+                try:
+                    error_data = http_response.json()
+                    logger.error(
+                        msg=f"Error saving document to Readwise (status {http_response.status_code}): {error_data}"
+                    )
+                except Exception:
+                    logger.error(
+                        msg=f"Error saving document to Readwise (status {http_response.status_code}): {http_response.text}"
+                    )
+
+                return False, None
+
+        except Exception as e:
+            logger.error(msg=f"Error saving document to Readwise: {e}", exc_info=True)
+            # Return a tuple with success=False and None for response
+            return False, None
 
     def close(self) -> None:
         """Close the client and clean up resources."""

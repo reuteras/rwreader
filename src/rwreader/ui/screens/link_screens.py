@@ -1,15 +1,12 @@
 """Link selection screen."""
 
 import logging
-import os
 import webbrowser
 from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 import httpx
-import readwise
-from readwise.model import PostResponse
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
@@ -267,24 +264,23 @@ class LinkSelectionScreen(ModalScreen):
             link: URL to save
         """
         try:
-            os.environ["READWISE_TOKEN"] = self.configuration.readwise_token
             # Show a progress indicator during the API call
             self.app.push_screen(screen="progress")
 
-            # Save to Readwise
-            response: tuple[bool, PostResponse] = readwise.save_document(url=link)  # type: ignore
+            # Save to Readwise using the client
+            success, response = self.app.client.save_document(url=link)
 
             # Remove progress screen
             self.app.pop_screen()
 
-            if response[1].url and response[1].id:
+            if success and response and response.url and response.id:
                 self.notify(
                     title="Readwise",
                     message="Link saved to Readwise.",
                     timeout=5,
                 )
                 if self.open:
-                    webbrowser.open(url=response[1].url)
+                    webbrowser.open(url=response.url)
             else:
                 self.notify(
                     title="Readwise",

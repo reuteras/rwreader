@@ -4,7 +4,9 @@ import logging
 import re
 from datetime import datetime
 from http import HTTPStatus
+from urllib.parse import quote, urlparse
 
+import httpx
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 
@@ -119,6 +121,77 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
             return f"*Error processing content. Raw HTML shown below:*\n\n```html\n{html_content}\n```"
 
 
+def _remove_anchor_links(markdown_text: str) -> str:
+    """Remove anchor links that point to headings (e.g., [#](https://example.com#heading)).
+
+    These links are not useful in a TUI context as they typically link to headings
+    within the same article.
+
+    Args:
+        markdown_text: Markdown text that may contain anchor links
+
+    Returns:
+        Markdown text with anchor links removed
+    """
+    # Match patterns like [#](url#heading) or [^](url#heading) etc.
+    # Remove the entire link syntax, leaving just the text if it's not just a symbol
+    markdown_text = re.sub(
+        pattern=r"\[([#^\s*])\]\([^)]*#[^)]*\)",
+        repl="",
+        string=markdown_text,
+    )
+    return markdown_text
+
+
+def _convert_underline_headers_to_hash(markdown_text: str) -> str:
+    """Convert underline-style headers (====, ----) to hash-style headers (#, ##).
+
+    This converts headers like:
+        Title
+        =====
+    to:
+        ## Title
+
+    And headers like:
+        Subtitle
+        --------
+    to:
+        ### Subtitle
+
+    Args:
+        markdown_text: Markdown text that may contain underline-style headers
+
+    Returns:
+        Markdown text with hash-style headers
+    """
+    lines = markdown_text.split("\n")
+    result = []
+    i = 0
+
+    while i < len(lines):
+        if i + 1 < len(lines):
+            current_line = lines[i].rstrip()
+            next_line = lines[i + 1].rstrip()
+
+            # Check if next line is a header underline
+            if current_line and next_line:
+                # Check for "====" pattern (level 2 header / ##)
+                if re.match(pattern=r"^=+$", string=next_line):
+                    result.append(f"## {current_line}")
+                    i += 2
+                    continue
+                # Check for "----" pattern (level 3 header / ###)
+                elif re.match(pattern=r"^-+$", string=next_line):
+                    result.append(f"### {current_line}")
+                    i += 2
+                    continue
+
+        result.append(lines[i])
+        i += 1
+
+    return "\n".join(result)
+
+
 def _clean_markdown(markdown_text: str) -> str:
     """Clean up markdown text for better readability.
 
@@ -128,6 +201,12 @@ def _clean_markdown(markdown_text: str) -> str:
     Returns:
         Cleaned markdown text
     """
+    # Remove anchor links to headings
+    markdown_text = _remove_anchor_links(markdown_text=markdown_text)
+
+    # Convert underline-style headers to hash-style headers
+    markdown_text = _convert_underline_headers_to_hash(markdown_text=markdown_text)
+
     # Replace multiple consecutive blank lines with a single one
     markdown_text = re.sub(pattern=r"\n{3,}", repl="\n\n", string=markdown_text)
 
@@ -263,3 +342,166 @@ def format_timestamp(timestamp: str | int | float | None) -> str:
     except Exception as e:
         logger.error(msg=f"Error formatting timestamp '{timestamp}': {e}")
         return str(object=timestamp) if timestamp else ""
+
+
+def _validate_url(url: str) -> None:
+    """Validate that a URL is safe to use.
+
+    Args:
+        url: URL to validate
+
+    Raises:
+        ValueError: If URL is invalid or unsafe
+    """
+    if not url or not isinstance(url, str):
+        raise ValueError("URL must be a non-empty string")
+
+    try:
+        parsed = urlparse(url)
+
+        # Check for required components
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("URL must have a scheme (http/https) and network location")
+
+        # Only allow HTTP and HTTPS
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(
+                f"Only HTTP and HTTPS URLs are allowed, got: {parsed.scheme}"
+            )
+
+        # Warn about localhost/private IPs to prevent SSRF
+        netloc_lower = parsed.netloc.lower()
+        private_patterns = [
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "::1",
+            "169.254",  # Link-local
+        ]
+        if any(pattern in netloc_lower for pattern in private_patterns):
+            logger.warning(msg=f"URL uses local/private network: {url}")
+
+    except Exception as e:
+        raise ValueError(f"Invalid URL: {e}") from e
+
+
+async def download_and_convert_html(
+    url: str,
+    method: str = "service",
+    service_url: str = "https://r.jina.ai/$url",
+    timeout: int = 30,
+) -> str:
+    """Download HTML from URL and convert to markdown.
+
+    Args:
+        url: URL to download HTML from
+        method: Conversion method - "direct" (local markdownify) or "service" (external service)
+        service_url: Service URL template (use $url placeholder for actual URL)
+        timeout: Request timeout in seconds
+
+    Returns:
+        Markdown content
+
+    Raises:
+        ValueError: If URL is invalid or method is unknown
+        httpx.RequestError: If network request fails
+    """
+    if not url:
+        raise ValueError("URL cannot be empty")
+
+    if method not in ("direct", "service"):
+        raise ValueError(f"Unknown method: {method}. Must be 'direct' or 'service'")
+
+    # Validate the URL before processing
+    _validate_url(url)
+
+    try:
+        if method == "service":
+            return await _convert_via_service(
+                url=url, service_url=service_url, timeout=timeout
+            )
+        else:
+            return await _convert_via_direct_download(url=url, timeout=timeout)
+    except Exception as e:
+        logger.error(msg=f"Error downloading and converting HTML from {url}: {e}")
+        raise
+
+
+async def _convert_via_service(url: str, service_url: str, timeout: int) -> str:
+    """Convert HTML via external service like Jina API.
+
+    Args:
+        url: Original article URL
+        service_url: Service URL template with $url placeholder
+        timeout: Request timeout in seconds
+
+    Returns:
+        Markdown content from service
+
+    Raises:
+        httpx.RequestError: If service request fails
+        ValueError: If service URL template is invalid
+    """
+    try:
+        # Validate service_url template
+        if not service_url or "$url" not in service_url:
+            raise ValueError(
+                "Service URL must contain $url placeholder for article URL"
+            )
+
+        # URL-encode the article URL for safe inclusion
+        encoded_url = quote(url, safe=":/?#[]@!$&'()*+,;=")
+
+        # Replace $url placeholder with properly encoded URL
+        service_request_url = service_url.replace("$url", encoded_url)
+
+        # Validate the resulting service request URL
+        _validate_url(service_request_url)
+
+        logger.debug(msg=f"Calling service for URL: {url} (encoded: {encoded_url})")
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url=service_request_url)
+            response.raise_for_status()
+            # Service like Jina returns markdown directly
+            return response.text
+    except httpx.HTTPError as e:
+        logger.error(msg=f"Service request failed: {e}")
+        raise
+    except ValueError as e:
+        logger.error(msg=f"Invalid service URL configuration: {e}")
+        raise
+
+
+async def _convert_via_direct_download(url: str, timeout: int) -> str:
+    """Download HTML directly and convert using local markdownify.
+
+    Args:
+        url: Article URL to download
+        timeout: Request timeout in seconds
+
+    Returns:
+        Converted markdown content
+
+    Raises:
+        httpx.RequestError: If download fails
+    """
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # Download the HTML with proper headers
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+
+            logger.debug(msg=f"Downloading HTML from: {url}")
+            response = await client.get(url=url, headers=headers)
+            response.raise_for_status()
+
+            logger.debug(msg=f"Successfully downloaded {len(response.text)} bytes")
+
+            # Convert HTML to markdown
+            markdown = render_html_to_markdown(html_content=response.text)
+            return markdown
+    except httpx.HTTPError as e:
+        logger.error(msg=f"Failed to download HTML from {url}: {e}")
+        raise

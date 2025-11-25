@@ -26,6 +26,17 @@ token = "your_readwise_token"  # Or use 1Password CLI integration
 # Display settings
 font_size = "medium"  # small, medium, large
 reading_width = 80    # characters
+
+[html_redownload]
+# HTML redownload feature settings
+enabled = true
+# Method to use: "direct" (local markdownify) or "service" (external service)
+method = "service"
+# Service URL (only used if method = "service")
+# Set to "https://r.jina.ai/$url" to use Jina API
+service_url = "https://r.jina.ai/$url"
+# Allow saving improved versions as new documents to Readwise
+allow_save_to_readwise = true
 """
 
 
@@ -176,6 +187,21 @@ class Configuration:
             display_config = self.config.get("display", {})
             self.font_size: str = display_config.get("font_size", "medium")
             self.reading_width: int = display_config.get("reading_width", 80)
+
+            # Get HTML redownload settings
+            html_redownload_config = self.config.get("html_redownload", {})
+            self.html_redownload_enabled: bool = html_redownload_config.get(
+                "enabled", True
+            )
+            self.html_redownload_method: str = html_redownload_config.get(
+                "method", "service"
+            )
+            self.html_redownload_service_url: str = html_redownload_config.get(
+                "service_url", "https://r.jina.ai/$url"
+            )
+            self.allow_save_to_readwise: bool = html_redownload_config.get(
+                "allow_save_to_readwise", True
+            )
 
             # Get version
             try:
