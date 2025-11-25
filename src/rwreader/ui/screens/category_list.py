@@ -40,8 +40,7 @@ class CategoryListScreen(Screen):
     def compose(self) -> ComposeResult:
         """Create the category list UI."""
         yield Header(show_clock=True)
-        yield Static("READWISE READER", id="title")
-        yield Static("Select a category to browse articles", id="subtitle")
+        yield Static("Select a category to browse articles", id="title")
         yield ListView(id="category_list")
         yield Footer()
 

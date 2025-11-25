@@ -32,6 +32,8 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **space**: Load more articles
 - **Escape / Backspace**: Back to category list
 - **h / ?**: Show/hide this help
+- **d**: Toggle dark mode
+- **q**: Quit
 
 ## Article Reader Screen
 - **J / K**: Navigate to next/previous article (uppercase!)
@@ -43,6 +45,8 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **Ctrl+L**: Show links in article
 - **Escape / Backspace**: Back to article list
 - **h / ?**: Show/hide this help
+- **d**: Toggle dark mode
+- **q**: Quit
 
 ## Library Categories
 - **📥 Inbox**: Default location for new articles

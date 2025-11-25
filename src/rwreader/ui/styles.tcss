@@ -2,8 +2,8 @@
 
 /* Header styling */
 Header {
-    background: #344455;
-    color: white;
+    background: $panel;
+    color: $text;
     height: 1;
     content-align: center top;
 }
@@ -13,7 +13,7 @@ CategoryListScreen #title {
     width: 100%;
     height: 3;
     content-align: center middle;
-    background: $primary;
+    background: $panel;
     color: $text;
     text-style: bold;
     padding: 1;
@@ -38,7 +38,7 @@ ArticleListScreen #category_title {
     width: 100%;
     height: 3;
     content-align: center middle;
-    background: $primary;
+    background: $panel;
     color: $text;
     text-style: bold;
     padding: 1;
@@ -69,12 +69,6 @@ ArticleReaderScreen #article_content {
 ListView {
     border: none;
     padding: 0 1;
-}
-
-ListView:focus {
-    border: none;
-    border-left: thick $accent;
-    padding: 0 0 0 1;
 }
 
 ListView > ListItem {
