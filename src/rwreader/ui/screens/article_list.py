@@ -158,8 +158,31 @@ class ArticleListScreen(Screen):
         list_view = self.query_one(ListView)
         list_view.action_cursor_up()
 
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle ListView item selection (Enter key)."""
+        # Get the index of the selected item
+        list_view = self.query_one(ListView)
+        if list_view.index is not None:
+            self.current_index = list_view.index
+            if 0 <= self.current_index < len(self.articles):
+                article = self.articles[self.current_index]
+
+                # Import ArticleReaderScreen
+                from .article_reader import ArticleReaderScreen  # noqa: PLC0415
+
+                # Pass article, article_list, and current_index
+                # This enables J/K navigation in reader
+                self.app.push_screen(
+                    ArticleReaderScreen(
+                        article=article,
+                        article_list=self.articles,
+                        current_index=self.current_index,
+                        category=self.category,
+                    )
+                )
+
     async def action_select_article(self) -> None:
-        """Select article and push reader screen."""
+        """Select article and push reader screen (fallback)."""
         list_view = self.query_one(ListView)
         if list_view.highlighted_child and list_view.index is not None:
             # Get highlighted index

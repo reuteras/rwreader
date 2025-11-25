@@ -135,8 +135,19 @@ class CategoryListScreen(Screen):
         list_view = self.query_one(ListView)
         list_view.action_cursor_up()
 
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle ListView item selection (Enter key)."""
+        # Get the selected item's data
+        if event.item and hasattr(event.item, "data") and event.item.data:
+            category = event.item.data.get("category")  # type: ignore
+            if category:
+                # Import and push ArticleListScreen
+                from .article_list import ArticleListScreen  # noqa: PLC0415
+
+                self.app.push_screen(ArticleListScreen(category=category))
+
     async def action_select_category(self) -> None:
-        """Select category and push article list screen."""
+        """Select category and push article list screen (fallback)."""
         list_view = self.query_one(ListView)
         if list_view.highlighted_child:
             # Extract category name from ListItem data
