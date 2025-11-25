@@ -1,4 +1,4 @@
-/* styles.tcss - Styling for rwreader with progressive loading */
+/* styles.tcss - Styling for rwreader with single-window navigation */
 
 /* Header styling */
 Header {
@@ -8,71 +8,66 @@ Header {
     content-align: center top;
 }
 
-/* Navigation tree styling */
-#navigation {
-    width: 20;
-    height: 100%;
-    border-right: solid #344455;
-    background: $panel;
-}
-
-#navigation .tree--label {
-    color: $text;
-}
-
-#navigation .tree--label-selected {
-    background: $accent;
-    color: $text;
-    text-style: bold;
-}
-
-#navigation .tree--guides {
-    color: $primary-lighten-2;
-}
-
-/* Article list container styling */
-#articles_container {
-    height: 30%;
-    min-height: 10;
-    max-height: 40%;
-    border-bottom: solid #344455;
-    overflow: auto;
-}
-
-/* Article list styling */
-#articles {
-    height: auto;
-    min-height: 5;
-    border: none;
-}
-
-/* Loading indicator styling */
-#loading_indicator {
-    height: 3;
+/* Category List Screen */
+CategoryListScreen #title {
     width: 100%;
-    background: $surface;
-    content-align: center middle;
-}
-
-/* Load more button styling */
-#load_more {
     height: 3;
-    background: $boost;
     content-align: center middle;
+    background: $primary;
     color: $text;
     text-style: bold;
+    padding: 1;
 }
 
-#load_more:hover {
-    background: $accent;
-    color: $text-accent;
-}
-
-/* Content pane styling */
-#content {
-    height: 1fr;
-    min-height: 20;
+CategoryListScreen #subtitle {
+    width: 100%;
+    height: 2;
+    content-align: center middle;
+    color: $text-muted;
     padding: 0 1;
+}
+
+CategoryListScreen #category_list {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+}
+
+/* Article List Screen */
+ArticleListScreen #category_title {
+    width: 100%;
+    height: 3;
+    content-align: center middle;
+    background: $primary;
+    color: $text;
+    text-style: bold;
+    padding: 1;
+}
+
+ArticleListScreen #article_list {
+    width: 100%;
+    height: 1fr;
+}
+
+/* Article Reader Screen */
+ArticleReaderScreen #article_position {
+    width: 100%;
+    height: 2;
+    content-align: center middle;
+    background: $surface;
+    color: $text-muted;
+    padding: 0 1;
+}
+
+ArticleReaderScreen #reader_scroll {
+    width: 100%;
+    height: 1fr;
+}
+
+ArticleReaderScreen #article_content {
+    width: 100%;
+    height: auto;
+    padding: 1;
 }
 
 /* List item styling */
@@ -117,32 +112,22 @@ ListView > ListItem#header {
     height: 100%;
 }
 
-/* Load more item styling */
-ListView > ListItem#load_more_item {
-    background: $accent-darken-2;
-    color: $text-accent;
-    text-style: bold;
-    text-align: center;
-    height: 3;
-    padding-top: 1;
-}
-
-ListView > ListItem#load_more_item:hover,
-ListView > ListItem#load_more_item.--highlight {
-    background: $accent;
-    color: $text-accent;
-}
-
-Markdown {
-    /* Set a max-width in columns (characters) */
-    max-width: 120;
-    /* This ensures content wraps at the max-width */
-    overflow-x: hidden;
-}
-
+/* Link selection screen styling */
 LinkSelectionScreen ListView {
     margin: 1 0;
     max-height: 20;
     overflow-y: auto;
     width: 60%;
+}
+
+/* Markdown viewer styling */
+Markdown {
+    max-width: 120;
+    overflow-x: hidden;
+}
+
+/* Scroll container styling */
+VerticalScroll {
+    width: 100%;
+    height: 100%;
 }
