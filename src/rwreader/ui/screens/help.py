@@ -6,59 +6,60 @@ from textual.widgets import MarkdownViewer
 
 HELP_TEXT = """# Readwise Reader TUI Help
 
-## Navigation
-- **j / k**: Navigate up and down in the current pane
-- **Arrow keys**: Navigate in the current pane
-- **tab / shift+tab**: Navigate between panes
+## Navigation Model
+Readwise Reader TUI uses a single-window, stack-based navigation:
+1. **Category List** → Select a category (Inbox, Later, Feed, Archive)
+2. **Article List** → Select an article to read
+3. **Article Reader** → Read the article with J/K navigation
 
-## Direct Navigation Shortcuts
-- **I**: Go directly to Inbox
-- **L**: Go directly to Later
-- **A**: Go directly to Archive
+## Category List Screen
+- **j / k**: Navigate categories
+- **Enter**: Select category and view articles
+- **r**: Refresh category counts
+- **h / ?**: Show/hide this help
+- **d**: Toggle dark mode
+- **q**: Quit
 
-## Article Actions
-- **r**: Toggle read/unread status
+## Article List Screen
+- **j / k**: Navigate articles
+- **Enter**: Read selected article
 - **a**: Move article to Archive
 - **l**: Move article to Later
 - **i**: Move article to Inbox
+- **D**: Delete article (with confirmation)
 - **o**: Open article in browser
-- **m**: Show detailed article metadata
-- **D**: Delete article
-
-## Link Actions
-- **ctrl+o**: Open links from article
-- **ctrl+s**: Save link to downloads
-- **ctrl+l**: Add link to Readwise
-- **ctrl+shift+l**: Add link to Readwise and open
-
-## App Controls
+- **r**: Refresh article list
+- **space**: Load more articles
+- **Escape / Backspace**: Back to category list
 - **h / ?**: Show/hide this help
-- **d**: Toggle dark mode
-- **c**: Clear content pane
-- **G / ,**: Refresh data
-- **q**: Quit
 
-## Loading More
-- **space**: Load more articles when focused on the article list
+## Article Reader Screen
+- **J / K**: Navigate to next/previous article (uppercase!)
+- **a**: Move article to Archive
+- **l**: Move article to Later
+- **i**: Move article to Inbox
+- **D**: Delete article (with confirmation)
+- **o**: Open article in browser
+- **Ctrl+L**: Show links in article
+- **Escape / Backspace**: Back to article list
+- **h / ?**: Show/hide this help
 
 ## Library Categories
-- **Inbox**: Default location for new articles
-- **Later**: Articles saved for reading later
-- **Archive**: Articles you've finished with
+- **📥 Inbox**: Default location for new articles
+- **⏰ Later**: Articles saved for reading later
+- **📰 Feed**: Your RSS feed (unread only)
+- **📦 Archive**: Articles you've finished with
 
 ## Tips
-- Articles are automatically marked as read when opened (configurable)
-- Links in articles can be clicked to open in browser
-- Use the 'm' key to view all available metadata for an article
-- When an article is displayed, you can move it to any category with a single keystroke
-- The app now uses progressive loading for better performance with large libraries
-
-## Debug
-- **Ctrl+R**: Reset cache and reload all data
-- **Ctrl+D**: Dump debug information to log file
+- Use **J / K** (uppercase) in the reader to navigate between articles without going back
+- Use **Escape** or **Backspace** to go back at any level
+- Articles are automatically marked as read when opened
+- The app uses progressive loading - use **space** to load more articles
+- Use **r** on any screen to refresh data from the API
 
 ## About
 Readwise Reader TUI is a terminal user interface for accessing your Readwise Reader library.
+Version 2.0 - Single-window navigation model.
 """
 
 
