@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
@@ -67,14 +66,13 @@ class ArticleReaderScreen(Screen):
     def compose(self) -> ComposeResult:
         """Create the article reader UI."""
         yield Header(show_clock=True)
-        with VerticalScroll(id="reader_scroll"):
-            yield Static("", id="article_position")
-            yield LinkableMarkdownViewer(
-                markdown="# Loading...\n\nPlease wait...",
-                id="article_content",
-                show_table_of_contents=False,
-                open_links=False,
-            )
+        yield Static("", id="article_position")
+        yield LinkableMarkdownViewer(
+            markdown="# Loading...\n\nPlease wait...",
+            id="article_content",
+            show_table_of_contents=False,
+            open_links=False,
+        )
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -166,9 +164,12 @@ class ArticleReaderScreen(Screen):
 
     def refresh_article(self) -> None:
         """Refresh display with new article."""
-        # Scroll to top
-        scroll_view = self.query_one("#reader_scroll", VerticalScroll)
-        scroll_view.scroll_home(animate=False)
+        # Scroll the markdown viewer to top
+        try:
+            content_view = self.query_one("#article_content", LinkableMarkdownViewer)
+            content_view.scroll_home(animate=False)
+        except Exception:
+            pass  # Widget may not be mounted yet
 
         # Load new article content
         self.load_article_content()

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Header, ListItem, ListView, Static
 
@@ -54,9 +53,8 @@ class ArticleListScreen(Screen):
     def compose(self) -> ComposeResult:
         """Create the article list UI."""
         yield Header(show_clock=True)
-        with VerticalScroll():
-            yield Static(f"{self.category.upper()}", id="category_title")
-            yield ListView(id="article_list")
+        yield Static(f"{self.category.upper()}", id="category_title")
+        yield ListView(id="article_list")
         yield Footer()
 
     async def on_mount(self) -> None:
