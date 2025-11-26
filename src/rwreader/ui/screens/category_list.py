@@ -62,17 +62,24 @@ class CategoryListScreen(Screen):
             return
 
         try:
-            # Show loading message
-            self.notify("Loading categories...", title="Loading")
+            logger.debug(f"load_categories called with refresh={refresh}")
 
             # Get counts for each category using the client's methods
             client = self.app.client  # type: ignore
 
             # Fetch data from API (or cache if not refreshing)
             # Use refresh=True to force API call, otherwise use cache if available
+            logger.debug("Fetching inbox data...")
             inbox_data = client.get_inbox(refresh=refresh)
+            logger.debug(f"Got {len(inbox_data)} inbox items")
+
+            logger.debug("Fetching feed data...")
             feed_data = client.get_feed(refresh=refresh)
+            logger.debug(f"Got {len(feed_data)} feed items")
+
+            logger.debug("Fetching later data...")
             later_data = client.get_later(refresh=refresh)
+            logger.debug(f"Got {len(later_data)} later items")
 
             # Calculate counts
             inbox_count = len(inbox_data) if inbox_data else 0
@@ -84,6 +91,10 @@ class CategoryListScreen(Screen):
             )
             later_count = len(later_data) if later_data else 0
 
+            logger.debug(
+                f"Calculated counts: inbox={inbox_count}, feed={feed_count}, later={later_count}"
+            )
+
             self.categories = {
                 "inbox": inbox_count,
                 "feed": feed_count,
@@ -92,46 +103,63 @@ class CategoryListScreen(Screen):
             }
 
             # Populate the list
+            logger.debug("Populating list...")
             self.populate_list()
+            logger.debug("List populated successfully")
+
+            self.notify("Categories loaded", title="Success")
 
         except Exception as e:
-            logger.error(f"Error loading categories: {e}")
+            logger.error(f"Error loading categories: {e}", exc_info=True)
             self.notify(f"Error loading categories: {e}", severity="error")
 
     def populate_list(self) -> None:
         """Populate the ListView with categories."""
-        list_view = self.query_one("#category_list", ListView)
+        try:
+            logger.debug("populate_list called")
+            list_view = self.query_one("#category_list", ListView)
 
-        # Remove all existing items explicitly to avoid duplicate IDs
-        for child in list(list_view.children):
-            child.remove()
+            # Remove all existing items explicitly to avoid duplicate IDs
+            existing_count = len(list(list_view.children))
+            logger.debug(f"Removing {existing_count} existing items")
+            for child in list(list_view.children):
+                child.remove()
 
-        list_view.clear()
+            list_view.clear()
+            logger.debug("ListView cleared")
 
-        # Category icons and names
-        categories = [
-            ("inbox", "📥", "Inbox"),
-            ("later", "⏰", "Later"),
-            ("feed", "📰", "Feed"),
-            ("archive", "📦", "Archive"),
-        ]
+            # Category icons and names
+            categories = [
+                ("inbox", "📥", "Inbox"),
+                ("later", "⏰", "Later"),
+                ("feed", "📰", "Feed"),
+                ("archive", "📦", "Archive"),
+            ]
 
-        for category_id, icon, name in categories:
-            count = self.categories.get(category_id, 0)
-            if count >= 0:
-                display_text = f"{icon} {name} ({count})"
-            else:
-                display_text = f"{icon} {name}"
+            logger.debug(f"Adding categories with counts: {self.categories}")
+            for category_id, icon, name in categories:
+                count = self.categories.get(category_id, 0)
+                if count >= 0:
+                    display_text = f"{icon} {name} ({count})"
+                else:
+                    display_text = f"{icon} {name}"
 
-            # Don't set explicit ID - let Textual auto-generate to avoid duplicate ID issues
-            item = ListItem(Static(display_text, markup=False))
-            item.data = {"category": category_id}  # type: ignore
-            list_view.append(item)
+                logger.debug(f"Creating item for {category_id}: {display_text}")
+                # Don't set explicit ID - let Textual auto-generate to avoid duplicate ID issues
+                item = ListItem(Static(display_text, markup=False))
+                item.data = {"category": category_id}  # type: ignore
+                list_view.append(item)
+                logger.debug(f"Appended item {category_id}")
 
-        # Focus the list and select first item
-        list_view.focus()
-        if len(list_view.children) > 0:
-            list_view.index = 0
+            # Focus the list and select first item
+            list_view.focus()
+            if len(list_view.children) > 0:
+                list_view.index = 0
+            logger.debug(f"List populated with {len(list_view.children)} items")
+
+        except Exception as e:
+            logger.error(f"Error in populate_list: {e}", exc_info=True)
+            raise
 
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -172,9 +200,26 @@ class CategoryListScreen(Screen):
 
     def action_refresh(self) -> None:
         """Refresh category counts."""
-        # Load categories with refresh=True to fetch fresh data from API
+        logger.info("action_refresh called")
+
+        # Clear the list view immediately to show refresh is happening
+        list_view = self.query_one("#category_list", ListView)
+        logger.debug(f"Clearing {len(list(list_view.children))} items from view")
+        for child in list(list_view.children):
+            child.remove()
+        list_view.clear()
+        logger.debug("ListView cleared in action_refresh")
+
+        # Clear the client cache and reload (same pattern as article_list)
+        if hasattr(self.app, "client"):
+            logger.debug("Clearing client cache")
+            self.app.client.clear_cache()  # type: ignore
+
+        # Load fresh data from API
+        logger.debug("Calling load_categories with refresh=True")
         self.load_categories(refresh=True)
-        self.notify("Categories refreshed", title="Refresh")
+        self.notify("Refreshing categories...", title="Refresh")
+        logger.debug("action_refresh completed")
 
     def action_help(self) -> None:
         """Show help screen."""
