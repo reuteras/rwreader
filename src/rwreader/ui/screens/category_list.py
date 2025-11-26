@@ -145,9 +145,8 @@ class CategoryListScreen(Screen):
                     display_text = f"{icon} {name}"
 
                 logger.debug(f"Creating item for {category_id}: {display_text}")
-                item = ListItem(
-                    Static(display_text, markup=False), id=f"cat_{category_id}"
-                )
+                # Don't set explicit ID - let Textual auto-generate to avoid duplicate ID issues
+                item = ListItem(Static(display_text, markup=False))
                 item.data = {"category": category_id}  # type: ignore
                 list_view.append(item)
                 logger.debug(f"Appended item {category_id}")
