@@ -61,6 +61,12 @@ class ArticleListScreen(Screen):
         """Load articles when screen mounts."""
         self.load_articles()
 
+    async def on_resume(self) -> None:
+        """Refresh articles when screen resumes (e.g., after returning from reader)."""
+        logger.debug(f"ArticleListScreen resumed, refreshing {self.category} articles")
+        # Reload articles to reflect any changes made in other screens
+        self.load_articles(load_more=False)
+
     @work(exclusive=True)
     async def load_articles(self, load_more: bool = False) -> None:
         """Load articles from API.
