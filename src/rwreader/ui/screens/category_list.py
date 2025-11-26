@@ -123,7 +123,8 @@ class CategoryListScreen(Screen):
             else:
                 display_text = f"{icon} {name}"
 
-            item = ListItem(Static(display_text, markup=False), id=f"cat_{category_id}")
+            # Don't set explicit ID - let Textual auto-generate to avoid duplicate ID issues
+            item = ListItem(Static(display_text, markup=False))
             item.data = {"category": category_id}  # type: ignore
             list_view.append(item)
 
