@@ -117,6 +117,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "integration: marks tests as integration tests (slow, hits real API)",
+    "unit: marks tests as unit tests (fast, mocked)",
+]
 addopts = [
     "-v",
     "--strict-markers",
