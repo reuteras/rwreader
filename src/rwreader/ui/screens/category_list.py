@@ -49,8 +49,12 @@ class CategoryListScreen(Screen):
         self.load_categories()
 
     @work(exclusive=True)
-    async def load_categories(self) -> None:
-        """Load category counts from API."""
+    async def load_categories(self, refresh: bool = False) -> None:
+        """Load category counts from API.
+
+        Args:
+            refresh: Whether to force refresh from API (default: False)
+        """
         # Get API client from app
         if not hasattr(self.app, "client"):
             logger.error("No client available")
@@ -61,13 +65,14 @@ class CategoryListScreen(Screen):
             # Show loading message
             self.notify("Loading categories...", title="Loading")
 
-            # Get counts for each category using the client's cache
+            # Get counts for each category using the client's methods
             client = self.app.client  # type: ignore
 
-            # Get cached data to determine counts
-            inbox_data = client._category_cache.get("inbox", {}).get("data", [])
-            feed_data = client._category_cache.get("feed", {}).get("data", [])
-            later_data = client._category_cache.get("later", {}).get("data", [])
+            # Fetch data from API (or cache if not refreshing)
+            # Use refresh=True to force API call, otherwise use cache if available
+            inbox_data = client.get_inbox(refresh=refresh)
+            feed_data = client.get_feed(refresh=refresh)
+            later_data = client.get_later(refresh=refresh)
 
             # Calculate counts
             inbox_count = len(inbox_data) if inbox_data else 0
@@ -166,10 +171,8 @@ class CategoryListScreen(Screen):
 
     def action_refresh(self) -> None:
         """Refresh category counts."""
-        # Clear the client cache
-        if hasattr(self.app, "client"):
-            self.app.client.clear_cache()  # type: ignore
-        self.load_categories()
+        # Load categories with refresh=True to fetch fresh data from API
+        self.load_categories(refresh=True)
         self.notify("Categories refreshed", title="Refresh")
 
     def action_help(self) -> None:
