@@ -267,6 +267,7 @@ class ArticleListScreen(Screen):
             logger.error(f"Error moving article: {e}")
             self.notify(f"Error: {e}", severity="error")
 
+    @work
     async def action_delete_article(self) -> None:
         """Delete article (with confirmation)."""
         list_view = self.query_one(ListView)
