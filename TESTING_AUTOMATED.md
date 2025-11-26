@@ -223,19 +223,30 @@ uv run pytest tests/test_client.py::TestReadwiseClient
 uv run pytest -k "cache"
 ```
 
+## Recent Fixes
+
+### Test Isolation (Fixed in PR #37)
+- **Problem**: Tests were prompting for 1Password login and hitting real Readwise API
+- **Root Cause**: `app_with_mock_client` fixture was creating `RWReader()` which loaded real `Configuration`
+- **Solution**: Mock `Configuration` class before creating app in test fixture
+- **Status**: ✅ Fixed - All tests now run without 1Password prompts or real API calls
+
 ## Known Issues
 
-### Slow Integration Tests
-- **Problem**: Integration tests hit real Readwise API, causing rate limits
-- **Impact**: Tests take 30+ seconds, encounter rate limiting
-- **Solution**: Mark with `@pytest.mark.integration` and exclude from CI
-- **Future**: Add better mocking to avoid real API calls
+### Integration Tests Architectural Mismatch
+- **Problem**: 12 integration tests fail due to architectural changes
+- **Examples**:
+  - Tests expect widgets like `#articles` and `#navigation` that don't exist in default screen
+  - Tests expect `app.current_category` attribute removed in refactoring
+- **Impact**: Tests marked with `@pytest.mark.integration` currently fail
+- **Status**: Tests are properly isolated (no real API calls), but need updates to match current architecture
+- **Future**: Refactor integration tests to match current three-screen architecture (CategoryList, ArticleList, ArticleReader)
 
-### Outdated Tests
+### Outdated Tests (Skipped)
 - **Problem**: Some tests expect deprecated attributes
 - **Example**: `test_navigate_between_categories` expects `app.current_category`
-- **Status**: Skipped with TODO to refactor
-- **Future**: Update tests to match current architecture
+- **Status**: Skipped with `@pytest.mark.skip` and TODO to refactor
+- **Future**: Update tests to check screen state instead of app attributes
 
 ## Contributing
 

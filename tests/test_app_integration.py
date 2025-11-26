@@ -12,7 +12,15 @@ def app_with_mock_client(monkeypatch):
     """Create an app instance with mocked API client."""
     # Mock sys.argv to prevent argparse errors
     monkeypatch.setattr("sys.argv", ["rwreader"])
-    app = RWReader()
+
+    # Mock Configuration to prevent loading real config (including 1Password)
+    mock_config = Mock()
+    mock_config.token = "test_token_no_real_api"
+    mock_config.default_theme = "dark"
+    mock_config.cache_size = 10000
+
+    with patch("rwreader.ui.app.Configuration", return_value=mock_config):
+        app = RWReader()
 
     # Create mock client with test data
     mock_client = Mock()
