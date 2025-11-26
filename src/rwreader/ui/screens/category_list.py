@@ -96,6 +96,11 @@ class CategoryListScreen(Screen):
     def populate_list(self) -> None:
         """Populate the ListView with categories."""
         list_view = self.query_one("#category_list", ListView)
+
+        # Remove all existing items explicitly to avoid duplicate IDs
+        for child in list(list_view.children):
+            child.remove()
+
         list_view.clear()
 
         # Category icons and names

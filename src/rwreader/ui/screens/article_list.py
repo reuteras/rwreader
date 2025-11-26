@@ -124,6 +124,11 @@ class ArticleListScreen(Screen):
     def populate_list(self) -> None:
         """Populate ListView with articles."""
         list_view = self.query_one("#article_list", ListView)
+
+        # Remove all existing items explicitly to avoid duplicate IDs
+        for child in list(list_view.children):
+            child.remove()
+
         list_view.clear()
 
         for article in self.articles:
