@@ -233,6 +233,7 @@ class ArticleReaderScreen(Screen):
             logger.error(f"Error moving article: {e}")
             self.notify(f"Error: {e}", severity="error")
 
+    @work
     async def action_delete(self) -> None:
         """Delete this article (with confirmation)."""
         article_id = str(self.article.get("id"))
