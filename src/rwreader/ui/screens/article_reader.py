@@ -186,7 +186,7 @@ class ArticleReaderScreen(Screen):
         """Move this article to Inbox."""
         await self._move_article("inbox")
 
-    async def _move_article(self, destination: str) -> None:
+    async def _move_article(self, destination: str) -> None:  # noqa: PLR0912
         """Move the current article to a destination.
 
         Args:
@@ -214,8 +214,19 @@ class ArticleReaderScreen(Screen):
                 self.notify(f"Moved to {destination.capitalize()}", title="Success")
                 # Auto-advance to next article if not in destination category
                 if self.category != destination:
+                    logger.debug(
+                        f"Removing article at index {self.current_index} from list of {len(self.article_list)} articles"
+                    )
                     # Remove from article list
-                    self.article_list.pop(self.current_index)
+                    removed_article = self.article_list.pop(self.current_index)
+                    logger.debug(
+                        f"After removal: {len(self.article_list)} articles remaining"
+                    )
+                    # Temporary debug notification
+                    self.notify(
+                        f"Removed '{removed_article.get('title', 'Unknown')[:30]}', {len(self.article_list)} left",
+                        title="Debug",
+                    )
                     # Adjust index if needed
                     if self.current_index >= len(self.article_list):
                         self.current_index = len(self.article_list) - 1
@@ -226,6 +237,10 @@ class ArticleReaderScreen(Screen):
                     else:
                         self.notify("No more articles", title="Info")
                         self.app.pop_screen()
+                else:
+                    logger.debug(
+                        f"Article moved to {destination} which is same as current category {self.category}, not removing from list"
+                    )
             else:
                 self.notify(f"Failed to move to {destination}", severity="error")
 

@@ -145,10 +145,14 @@ class Configuration:
         logger: logging.Logger = logging.getLogger(name=__name__)
 
         if args.debug:
+            # Set root logger level to DEBUG so all loggers inherit it
+            logging.getLogger().setLevel(level=logging.DEBUG)
             logger.setLevel(level=logging.DEBUG)
             logger.debug(msg="Debug log enabled")
 
         if args.info:
+            # Set root logger level to INFO so all loggers inherit it
+            logging.getLogger().setLevel(level=logging.INFO)
             logger.setLevel(level=logging.INFO)
             logger.info(msg="Info log enabled")
 

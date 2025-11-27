@@ -64,8 +64,26 @@ class ArticleListScreen(Screen):
     async def on_resume(self) -> None:
         """Refresh articles when screen resumes (e.g., after returning from reader)."""
         logger.debug(f"ArticleListScreen resumed, refreshing {self.category} articles")
-        # Reload articles to reflect any changes made in other screens
-        self.load_articles(load_more=False)
+        logger.debug(f"Current articles count: {len(self.articles)}")
+        # Simply repopulate the list with current articles
+        # The article_list may have been modified by the reader (e.g., items removed)
+        # So we just need to update the UI to reflect those changes
+        self.populate_list()
+        logger.debug(f"After populate_list, articles count: {len(self.articles)}")
+        # Temporary debug notification to verify this is being called
+        self.notify(f"List refreshed: {len(self.articles)} articles", title="Debug")
+
+    def on_show(self) -> None:
+        """Called when screen becomes visible."""
+        logger.debug(f"ArticleListScreen shown, refreshing {self.category} articles")
+        logger.debug(f"Current articles count: {len(self.articles)}")
+        # Repopulate to reflect any changes made while in other screens
+        self.populate_list()
+        logger.debug(
+            f"After populate_list in on_show, articles count: {len(self.articles)}"
+        )
+        # Temporary debug notification
+        self.notify(f"List shown: {len(self.articles)} articles", title="Debug Show")
 
     @work(exclusive=True)
     async def load_articles(self, load_more: bool = False) -> None:
@@ -129,6 +147,7 @@ class ArticleListScreen(Screen):
 
     def populate_list(self) -> None:
         """Populate ListView with articles."""
+        logger.debug(f"populate_list called with {len(self.articles)} articles")
         list_view = self.query_one("#article_list", ListView)
 
         # Remove all existing items explicitly to avoid duplicate IDs
@@ -138,13 +157,14 @@ class ArticleListScreen(Screen):
         list_view.clear()
 
         for article in self.articles:
-            article_id = str(article.get("id"))
             display_title = safe_get_article_display_title(article=article)
+            logger.debug(f"Adding article to list: {display_title[:50]}")
 
-            # Create list item
-            list_item = ListItem(
-                Static(display_title, markup=False), id=f"art_{article_id}"
-            )
+            # Create list item - Don't set explicit ID to avoid duplicate ID issues
+            # Let Textual auto-generate IDs
+            list_item = ListItem(Static(display_title, markup=False))
+            # Store article ID in data for reference
+            list_item.data = {"article_id": str(article.get("id"))}  # type: ignore
 
             # Style based on read status
             is_read = article.get("read", False) or article.get("state") == "finished"

@@ -48,6 +48,12 @@ class CategoryListScreen(Screen):
         """Load categories when screen mounts."""
         self.load_categories()
 
+    async def on_resume(self) -> None:
+        """Refresh category counts when screen resumes."""
+        logger.debug("CategoryListScreen resumed, refreshing counts")
+        # Reload categories to reflect any changes made in other screens
+        self.load_categories(refresh=True)
+
     @work(exclusive=True)
     async def load_categories(self, refresh: bool = False) -> None:
         """Load category counts from API.
