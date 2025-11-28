@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import toml
+import tomli_w
 
 from rwreader.config import DEFAULT_CONFIG, Configuration, get_conf_value
 
@@ -78,7 +78,7 @@ class TestConfiguration:
             "readwise": {"token": "test_token_123"},
             "display": {"font_size": "large", "reading_width": READING_WIDTH_LARGE},
         }
-        config_path.write_text(toml.dumps(config_data))
+        config_path.write_text(tomli_w.dumps(config_data))
         return config_path
 
     @patch("rwreader.config.metadata.version")
@@ -120,7 +120,7 @@ class TestConfiguration:
             "readwise": {"token": "op read op://vault/item/token"},
             "display": {"font_size": "medium", "reading_width": READING_WIDTH_SMALL},
         }
-        config_path.write_text(toml.dumps(config_data))
+        config_path.write_text(tomli_w.dumps(config_data))
 
         config = Configuration(exec_args=["--config", str(config_path)])
 
@@ -138,7 +138,7 @@ class TestConfiguration:
         config_data = {
             "readwise": {"token": "minimal_token"},
         }
-        config_path.write_text(toml.dumps(config_data))
+        config_path.write_text(tomli_w.dumps(config_data))
 
         config = Configuration(exec_args=["--config", str(config_path)])
 
@@ -217,7 +217,7 @@ class TestConfiguration:
             "general": {"cache_size": 5000},
             # Missing readwise section with token
         }
-        config_path.write_text(toml.dumps(config_data))
+        config_path.write_text(tomli_w.dumps(config_data))
 
         with pytest.raises(SystemExit) as excinfo:
             Configuration(exec_args=["--config", str(config_path)])
@@ -244,7 +244,7 @@ class TestConfiguration:
             # Create instance with a valid config first
             temp_config_path = tmp_path / "temp.toml"
             temp_data = {"readwise": {"token": "temp"}}
-            temp_config_path.write_text(toml.dumps(temp_data))
+            temp_config_path.write_text(tomli_w.dumps(temp_data))
 
             config = Configuration(exec_args=["--config", str(temp_config_path)])
             config.create_default_config(str(config_path))
@@ -254,17 +254,22 @@ class TestConfiguration:
 
     def test_create_default_config_parent_dir_error(self, tmp_path: Path) -> None:
         """Test create_default_config with directory creation error."""
-        # Use a path that would cause permission error (root-owned directory)
-        # For testing, we'll mock the mkdir to raise an exception
+        # Mock both exists and mkdir to test directory creation error handling
         with patch("rwreader.config.metadata.version", return_value="0.1.1"):
             temp_config_path = tmp_path / "temp.toml"
             temp_data = {"readwise": {"token": "temp"}}
-            temp_config_path.write_text(toml.dumps(temp_data))
+            temp_config_path.write_text(tomli_w.dumps(temp_data))
 
             config = Configuration(exec_args=["--config", str(temp_config_path)])
 
-            with patch("pathlib.Path.mkdir", side_effect=PermissionError("No access")):
-                with pytest.raises(SystemExit) as excinfo:
-                    config.create_default_config("/root/impossible/config.toml")
+            # Mock exists to return False and mkdir to raise PermissionError
+            with patch("pathlib.Path.exists", return_value=False):
+                with patch(
+                    "pathlib.Path.mkdir", side_effect=PermissionError("No access")
+                ):
+                    with pytest.raises(SystemExit) as excinfo:
+                        config.create_default_config(
+                            str(tmp_path / "newdir" / "config.toml")
+                        )
 
-                assert excinfo.value.code == 1
+                    assert excinfo.value.code == 1

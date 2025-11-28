@@ -894,13 +894,17 @@ class ReadwiseClient:
                 timeout=self._timeout,
             )
 
-            logger.debug(msg=f"Readwise API response status: {http_response.status_code}")
+            logger.debug(
+                msg=f"Readwise API response status: {http_response.status_code}"
+            )
 
             # Check response status - both 200 (OK) and 201 (Created) are success
             if http_response.status_code in (HTTPStatus.OK, HTTPStatus.CREATED):
                 response_data = http_response.json()
                 # Create a simple object with id and url attributes
-                response = SimpleNamespace(id=response_data.get("id"), url=response_data.get("url"))
+                response = SimpleNamespace(
+                    id=response_data.get("id"), url=response_data.get("url")
+                )
                 logger.info(msg=f"Successfully saved document with ID: {response.id}")
                 self._invalidate_cache()
                 return True, response
