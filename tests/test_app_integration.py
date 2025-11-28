@@ -1,10 +1,20 @@
 """Integration tests for rwreader TUI application."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from rwreader.ui.app import RWReader
+from rwreader.ui.screens.article_list import ArticleListScreen
+from rwreader.ui.screens.article_reader import ArticleReaderScreen
+from rwreader.ui.screens.category_list import CategoryListScreen
+from rwreader.ui.screens.help import HelpScreen
+
+# Constants for category indices
+CATEGORY_INDEX_INBOX = 0
+CATEGORY_INDEX_FEED = 1
+CATEGORY_INDEX_LATER = 2
+CATEGORY_INDEX_ARCHIVE = 3
 
 
 @pytest.fixture
@@ -137,9 +147,6 @@ async def navigate_to_article_list(pilot, category="inbox"):
     Returns:
         The ArticleListScreen instance
     """
-    from rwreader.ui.screens.article_list import ArticleListScreen
-    from rwreader.ui.screens.category_list import CategoryListScreen
-
     # If we're not on CategoryListScreen, navigate back first
     while not isinstance(pilot.app.screen, CategoryListScreen):
         await pilot.press("escape")
@@ -147,15 +154,15 @@ async def navigate_to_article_list(pilot, category="inbox"):
 
     # Select the appropriate category
     category_map = {
-        "inbox": 0,
-        "feed": 1,
-        "later": 2,
-        "archive": 3,
+        "inbox": CATEGORY_INDEX_INBOX,
+        "feed": CATEGORY_INDEX_FEED,
+        "later": CATEGORY_INDEX_LATER,
+        "archive": CATEGORY_INDEX_ARCHIVE,
     }
 
     # Get the category list
     list_view = pilot.app.screen.query_one("#category_list")
-    list_view.index = category_map.get(category, 0)
+    list_view.index = category_map.get(category, CATEGORY_INDEX_INBOX)
     await pilot.pause()
 
     # Press enter to select category
@@ -182,8 +189,6 @@ async def navigate_to_article_reader(pilot, category="inbox", article_index=0):
     Returns:
         The ArticleReaderScreen instance
     """
-    from rwreader.ui.screens.article_reader import ArticleReaderScreen
-
     # Navigate to article list first
     await navigate_to_article_list(pilot, category)
 
@@ -215,8 +220,6 @@ async def test_app_startup(app_with_mock_client):
 @pytest.mark.integration
 async def test_navigate_between_categories(app_with_mock_client):
     """Test navigating between article categories."""
-    from rwreader.ui.screens.category_list import CategoryListScreen
-
     app = app_with_mock_client
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -228,36 +231,36 @@ async def test_navigate_between_categories(app_with_mock_client):
         list_view = app.screen.query_one("#category_list")
 
         # Start at Inbox (index 0)
-        list_view.index = 0
+        list_view.index = CATEGORY_INDEX_INBOX
         await pilot.pause()
-        assert list_view.index == 0
+        assert list_view.index == CATEGORY_INDEX_INBOX
 
         # Navigate down with j
         await pilot.press("j")
         await pilot.pause()
-        assert list_view.index == 1  # Feed
+        assert list_view.index == CATEGORY_INDEX_FEED
 
         # Navigate down with j
         await pilot.press("j")
         await pilot.pause()
-        assert list_view.index == 2  # Later
+        assert list_view.index == CATEGORY_INDEX_LATER
 
         # Navigate down with j
         await pilot.press("j")
         await pilot.pause()
-        assert list_view.index == 3  # Archive
+        assert list_view.index == CATEGORY_INDEX_ARCHIVE
 
         # Navigate back up with k
         await pilot.press("k")
         await pilot.pause()
-        assert list_view.index == 2  # Later
+        assert list_view.index == CATEGORY_INDEX_LATER
 
         # Navigate back to inbox
         await pilot.press("k")
         await pilot.pause()
         await pilot.press("k")
         await pilot.pause()
-        assert list_view.index == 0  # Inbox
+        assert list_view.index == CATEGORY_INDEX_INBOX
 
 
 @pytest.mark.asyncio
@@ -409,8 +412,6 @@ async def test_move_article_to_inbox(app_with_mock_client):
 @pytest.mark.integration
 async def test_pane_navigation_with_tab(app_with_mock_client):
     """Test navigating between panes with Tab."""
-    from rwreader.ui.screens.category_list import CategoryListScreen
-
     app = app_with_mock_client
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -456,8 +457,6 @@ async def test_dark_mode_toggle(app_with_mock_client):
 @pytest.mark.integration
 async def test_show_help(app_with_mock_client):
     """Test showing/hiding help screen."""
-    from rwreader.ui.screens.help import HelpScreen
-
     app = app_with_mock_client
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -541,8 +540,6 @@ async def test_open_in_browser(app_with_mock_client):
 @pytest.mark.integration
 async def test_clear_content(app_with_mock_client):
     """Test going back from ArticleReaderScreen to ArticleListScreen."""
-    from rwreader.ui.screens.article_list import ArticleListScreen
-
     app = app_with_mock_client
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -562,8 +559,6 @@ async def test_clear_content(app_with_mock_client):
 @pytest.mark.integration
 async def test_next_previous_category(app_with_mock_client):
     """Test J/K for navigating between categories in CategoryListScreen."""
-    from rwreader.ui.screens.category_list import CategoryListScreen
-
     app = app_with_mock_client
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -598,10 +593,6 @@ async def test_next_previous_category(app_with_mock_client):
 @pytest.mark.integration
 async def test_multiple_article_interactions(app_with_mock_client):
     """Test a sequence of typical user interactions."""
-    from rwreader.ui.screens.article_list import ArticleListScreen
-    from rwreader.ui.screens.article_reader import ArticleReaderScreen
-    from rwreader.ui.screens.category_list import CategoryListScreen
-
     app = app_with_mock_client
     async with app.run_test() as pilot:
         await pilot.pause()
