@@ -130,7 +130,9 @@ def app_with_mock_client(monkeypatch):
         return mock_client
 
     # Patch Configuration and create_readwise_client using monkeypatch (persists for test)
-    monkeypatch.setattr("rwreader.ui.app.Configuration", lambda *args, **kwargs: mock_config)
+    monkeypatch.setattr(
+        "rwreader.ui.app.Configuration", lambda *args, **kwargs: mock_config
+    )
     monkeypatch.setattr("rwreader.ui.app.create_readwise_client", mock_create_client)
 
     app = RWReader()
@@ -324,7 +326,9 @@ async def test_keyboard_navigation_j_k(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skip(reason="Flaky test - populate_list widget recreation causes timeout in test environment")
+@pytest.mark.skip(
+    reason="Flaky test - populate_list widget recreation causes timeout in test environment"
+)
 async def test_move_article_to_archive(app_with_mock_client):
     """Test moving an article to archive.
 
@@ -355,7 +359,9 @@ async def test_move_article_to_archive(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-@pytest.mark.skip(reason="Flaky test - populate_list widget recreation causes timeout in test environment")
+@pytest.mark.skip(
+    reason="Flaky test - populate_list widget recreation causes timeout in test environment"
+)
 async def test_move_article_to_later(app_with_mock_client):
     """Test moving an article to later.
 
