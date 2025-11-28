@@ -277,7 +277,7 @@ When reporting issues, please include:
 
 Key log patterns to look for:
 
-```
+```bash
 # Category refresh
 action_refresh called
 Clearing X items from view
