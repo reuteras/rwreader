@@ -254,8 +254,7 @@ class TestConfiguration:
 
     def test_create_default_config_parent_dir_error(self, tmp_path: Path) -> None:
         """Test create_default_config with directory creation error."""
-        # Use a path that would cause permission error (root-owned directory)
-        # For testing, we'll mock the mkdir to raise an exception
+        # Mock both exists and mkdir to test directory creation error handling
         with patch("rwreader.config.metadata.version", return_value="0.1.1"):
             temp_config_path = tmp_path / "temp.toml"
             temp_data = {"readwise": {"token": "temp"}}
@@ -263,8 +262,10 @@ class TestConfiguration:
 
             config = Configuration(exec_args=["--config", str(temp_config_path)])
 
-            with patch("pathlib.Path.mkdir", side_effect=PermissionError("No access")):
-                with pytest.raises(SystemExit) as excinfo:
-                    config.create_default_config("/root/impossible/config.toml")
+            # Mock exists to return False and mkdir to raise PermissionError
+            with patch("pathlib.Path.exists", return_value=False):
+                with patch("pathlib.Path.mkdir", side_effect=PermissionError("No access")):
+                    with pytest.raises(SystemExit) as excinfo:
+                        config.create_default_config(str(tmp_path / "newdir" / "config.toml"))
 
-                assert excinfo.value.code == 1
+                    assert excinfo.value.code == 1
