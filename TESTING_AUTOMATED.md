@@ -62,7 +62,7 @@ See `.github/workflows/tests.yml` for configuration.
 
 ## Test Structure
 
-```
+```text
 tests/
 ├── conftest.py                    # Shared fixtures
 ├── test_client.py                 # API client tests
