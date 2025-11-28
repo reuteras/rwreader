@@ -1,0 +1,86 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master, claude/** ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Create virtual environment
+      run: uv venv
+
+    - name: Install dependencies
+      run: |
+        uv pip install -e .
+        uv pip install pytest pytest-cov pytest-asyncio mypy types-requests textual-dev toml
+
+    - name: Run linting with ruff
+      run: |
+        uv pip install ruff
+        uv run ruff check src/ tests/
+      continue-on-error: true
+
+    - name: Run type checking with mypy
+      run: |
+        source .venv/bin/activate || .venv\\Scripts\\activate
+        mypy src/rwreader/
+      continue-on-error: true
+
+    - name: Run tests with pytest
+      run: |
+        source .venv/bin/activate || .venv\\Scripts\\activate
+        pytest tests/ -v --cov=rwreader --cov-report=term-missing --cov-report=xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  test-minimal:
+    name: Test with minimal dependencies
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Create virtual environment
+      run: uv venv
+
+    - name: Install package only
+      run: uv pip install -e .
+
+    - name: Verify installation
+      run: |
+        source .venv/bin/activate
+        python -c "import rwreader; print('Import successful')"
