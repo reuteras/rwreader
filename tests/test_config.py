@@ -264,8 +264,12 @@ class TestConfiguration:
 
             # Mock exists to return False and mkdir to raise PermissionError
             with patch("pathlib.Path.exists", return_value=False):
-                with patch("pathlib.Path.mkdir", side_effect=PermissionError("No access")):
+                with patch(
+                    "pathlib.Path.mkdir", side_effect=PermissionError("No access")
+                ):
                     with pytest.raises(SystemExit) as excinfo:
-                        config.create_default_config(str(tmp_path / "newdir" / "config.toml"))
+                        config.create_default_config(
+                            str(tmp_path / "newdir" / "config.toml")
+                        )
 
                     assert excinfo.value.code == 1
