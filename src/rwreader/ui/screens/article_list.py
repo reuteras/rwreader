@@ -30,7 +30,7 @@ class ArticleListScreen(Screen):
         Binding("i", "inbox_article", "Inbox"),
         Binding("D", "delete_article", "Delete"),
         Binding("o", "open_browser", "Open in browser"),
-        Binding("r", "refresh", "Refresh"),
+        Binding("comma", "refresh", "Refresh"),
         Binding("escape", "back", "Back"),
         Binding("backspace", "back", "Back", show=False),
         Binding("h", "help", "Help"),
@@ -49,6 +49,8 @@ class ArticleListScreen(Screen):
         self.articles: list[dict[str, Any]] = []
         self.current_index = 0
         self.initial_page_size = 20
+        self.is_refreshing = False
+        self.refresh_animation_step = 0
 
     def compose(self) -> ComposeResult:
         """Create the article list UI."""
@@ -85,26 +87,72 @@ class ArticleListScreen(Screen):
         # Temporary debug notification
         self.notify(f"List shown: {len(self.articles)} articles", title="Debug Show")
 
-    @work(exclusive=True)
-    async def load_articles(self, load_more: bool = False) -> None:
+    def _update_refresh_animation(self) -> None:
+        """Update the title with refresh animation."""
+        if not self.is_refreshing:
+            return
+
+        # Create animated dots
+        dots = "." * (self.refresh_animation_step % 4)
+        title_text = f"{self.category.upper()} - Refreshing{dots}"
+
+        # Update the title
+        title = self.query_one("#category_title", Static)
+        title.update(title_text)
+
+        # Increment animation step
+        self.refresh_animation_step += 1
+
+        # Schedule next animation frame
+        if self.is_refreshing:
+            self.set_timer(0.3, self._update_refresh_animation)
+
+    def _start_refresh_animation(self) -> None:
+        """Start the refresh animation."""
+        self.is_refreshing = True
+        self.refresh_animation_step = 0
+        self._update_refresh_animation()
+
+    def _stop_refresh_animation(self) -> None:
+        """Stop the refresh animation and restore title."""
+        self.is_refreshing = False
+        title = self.query_one("#category_title", Static)
+        title.update(f"{self.category.upper()}")
+
+    @work(exclusive=False, thread=True)
+    async def load_articles(
+        self, load_more: bool = False, from_refresh: bool = False
+    ) -> None:
         """Load articles from API.
 
         Args:
             load_more: If True, load more articles beyond initial page
+            from_refresh: If True, this is a user-initiated refresh
         """
+        # Start refresh animation if this is a refresh action (must be called from main thread)
+        if from_refresh:
+            self.app.call_from_thread(self._start_refresh_animation)
+
         if not hasattr(self.app, "client"):
             logger.error("No client available")
-            self.notify("API client not initialized", severity="error")
+            self.app.call_from_thread(
+                self.notify, "API client not initialized", severity="error"
+            )
+            if from_refresh:
+                self.app.call_from_thread(self._stop_refresh_animation)
             return
 
         try:
             # Show loading message
             if not load_more:
-                self.notify(f"Loading {self.category} articles...", title="Loading")
+                self.app.call_from_thread(
+                    self.notify, f"Loading {self.category} articles...", title="Loading"
+                )
 
             client = self.app.client  # type: ignore
 
             # Get articles for the selected category
+            # These calls are synchronous but run in worker thread thanks to @work(thread=True)
             if self.category == "inbox":
                 self.articles = client.get_inbox(
                     refresh=not load_more,
@@ -132,18 +180,25 @@ class ArticleListScreen(Screen):
                     limit=self.initial_page_size if not load_more else None,
                 )
 
-            # Populate the list
-            self.populate_list()
+            # Populate the list (must be called from main thread)
+            self.app.call_from_thread(self.populate_list)
 
             if not load_more:
-                self.notify(
+                self.app.call_from_thread(
+                    self.notify,
                     f"Loaded {len(self.articles)} articles",
                     title=self.category.capitalize(),
                 )
 
         except Exception as e:
             logger.error(f"Error loading articles: {e}")
-            self.notify(f"Error loading articles: {e}", severity="error")
+            self.app.call_from_thread(
+                self.notify, f"Error loading articles: {e}", severity="error"
+            )
+        finally:
+            # Stop refresh animation (must be called from main thread)
+            if from_refresh:
+                self.app.call_from_thread(self._stop_refresh_animation)
 
     def populate_list(self) -> None:
         """Populate ListView with articles."""
@@ -358,8 +413,7 @@ class ArticleListScreen(Screen):
         """Refresh articles."""
         if hasattr(self.app, "client"):
             self.app.client.clear_cache()  # type: ignore
-        self.load_articles(load_more=False)
-        self.notify("Articles refreshed", title="Refresh")
+        self.load_articles(load_more=False, from_refresh=True)
 
     def action_load_more(self) -> None:
         """Load more articles."""

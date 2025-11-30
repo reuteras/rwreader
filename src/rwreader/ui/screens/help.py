@@ -15,7 +15,7 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 ## Category List Screen
 - **j / k**: Navigate categories
 - **Enter**: Select category and view articles
-- **r**: Refresh category counts
+- **,**: Refresh category counts
 - **h / ?**: Show/hide this help
 - **d**: Toggle dark mode
 - **q**: Quit
@@ -28,7 +28,7 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **i**: Move article to Inbox
 - **D**: Delete article (with confirmation)
 - **o**: Open article in browser
-- **r**: Refresh article list
+- **,**: Refresh article list
 - **space**: Load more articles
 - **Escape / Backspace**: Back to category list
 - **h / ?**: Show/hide this help
@@ -59,7 +59,7 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - Use **Escape** or **Backspace** to go back at any level
 - Articles are automatically marked as read when opened
 - The app uses progressive loading - use **space** to load more articles
-- Use **r** on any screen to refresh data from the API
+- Use **,** (comma) to refresh data from the API
 
 ## About
 Readwise Reader TUI is a terminal user interface for accessing your Readwise Reader library.

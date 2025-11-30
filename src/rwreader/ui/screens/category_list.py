@@ -22,7 +22,7 @@ class CategoryListScreen(Screen):
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select_category", "Select"),
-        Binding("r", "refresh", "Refresh"),
+        Binding("comma", "refresh", "Refresh"),
         Binding("h", "help", "Help"),
         Binding("d", "toggle_dark", "Toggle dark mode"),
         Binding("q", "quit", "Quit"),
@@ -36,6 +36,8 @@ class CategoryListScreen(Screen):
         """
         super().__init__(**kwargs)
         self.categories: dict[str, int] = {}
+        self.is_refreshing = False
+        self.refresh_animation_step = 0
 
     def compose(self) -> ComposeResult:
         """Create the category list UI."""
@@ -54,17 +56,57 @@ class CategoryListScreen(Screen):
         # Reload categories to reflect any changes made in other screens
         self.load_categories(refresh=True)
 
-    @work(exclusive=True)
+    def _update_refresh_animation(self) -> None:
+        """Update the title with refresh animation."""
+        if not self.is_refreshing:
+            return
+
+        # Create animated dots
+        dots = "." * (self.refresh_animation_step % 4)
+        title_text = f"Select a category to browse articles - Refreshing{dots}"
+
+        # Update the title
+        title = self.query_one("#title", Static)
+        title.update(title_text)
+
+        # Increment animation step
+        self.refresh_animation_step += 1
+
+        # Schedule next animation frame
+        if self.is_refreshing:
+            self.set_timer(0.3, self._update_refresh_animation)
+
+    def _start_refresh_animation(self) -> None:
+        """Start the refresh animation."""
+        self.is_refreshing = True
+        self.refresh_animation_step = 0
+        self._update_refresh_animation()
+
+    def _stop_refresh_animation(self) -> None:
+        """Stop the refresh animation and restore title."""
+        self.is_refreshing = False
+        title = self.query_one("#title", Static)
+        title.update("Select a category to browse articles")
+
+    @work(exclusive=False, thread=True)
     async def load_categories(self, refresh: bool = False) -> None:
         """Load category counts from API.
 
         Args:
             refresh: Whether to force refresh from API (default: False)
         """
+        # Start refresh animation if refreshing (must be called from the main thread)
+        if refresh:
+            self.app.call_from_thread(self._start_refresh_animation)
+
         # Get API client from app
         if not hasattr(self.app, "client"):
             logger.error("No client available")
-            self.notify("API client not initialized", severity="error")
+            self.app.call_from_thread(
+                self.notify, "API client not initialized", severity="error"
+            )
+            if refresh:
+                self.app.call_from_thread(self._stop_refresh_animation)
             return
 
         try:
@@ -75,6 +117,7 @@ class CategoryListScreen(Screen):
 
             # Fetch data from API (or cache if not refreshing)
             # Use refresh=True to force API call, otherwise use cache if available
+            # These calls are synchronous but run in worker thread thanks to @work(thread=True)
             logger.debug("Fetching inbox data...")
             inbox_data = client.get_inbox(refresh=refresh)
             logger.debug(f"Got {len(inbox_data)} inbox items")
@@ -108,16 +151,22 @@ class CategoryListScreen(Screen):
                 "archive": -1,  # Archive doesn't show count
             }
 
-            # Populate the list
+            # Populate the list (must be called from main thread)
             logger.debug("Populating list...")
-            self.populate_list()
+            self.app.call_from_thread(self.populate_list)
             logger.debug("List populated successfully")
 
-            self.notify("Categories loaded", title="Success")
+            self.app.call_from_thread(self.notify, "Categories loaded", title="Success")
 
         except Exception as e:
             logger.error(f"Error loading categories: {e}", exc_info=True)
-            self.notify(f"Error loading categories: {e}", severity="error")
+            self.app.call_from_thread(
+                self.notify, f"Error loading categories: {e}", severity="error"
+            )
+        finally:
+            # Stop refresh animation (must be called from main thread)
+            if refresh:
+                self.app.call_from_thread(self._stop_refresh_animation)
 
     def populate_list(self) -> None:
         """Populate the ListView with categories."""
@@ -208,23 +257,14 @@ class CategoryListScreen(Screen):
         """Refresh category counts."""
         logger.info("action_refresh called")
 
-        # Clear the list view immediately to show refresh is happening
-        list_view = self.query_one("#category_list", ListView)
-        logger.debug(f"Clearing {len(list(list_view.children))} items from view")
-        for child in list(list_view.children):
-            child.remove()
-        list_view.clear()
-        logger.debug("ListView cleared in action_refresh")
-
-        # Clear the client cache and reload (same pattern as article_list)
+        # Clear the client cache and reload (don't clear the list - let refresh happen in background)
         if hasattr(self.app, "client"):
             logger.debug("Clearing client cache")
             self.app.client.clear_cache()  # type: ignore
 
-        # Load fresh data from API
+        # Load fresh data from API (will show animation in title)
         logger.debug("Calling load_categories with refresh=True")
         self.load_categories(refresh=True)
-        self.notify("Refreshing categories...", title="Refresh")
         logger.debug("action_refresh completed")
 
     def action_help(self) -> None:
