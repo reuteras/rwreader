@@ -827,7 +827,7 @@ textual run --dev src/rwreader/main.py
 ## 10. COMPARISON TABLE
 
 | Aspect | termflux | rwreader | miniflux-client |
-|--------|----------|----------|-----------------|
+| ------ | -------- | -------- | --------------- |
 | **LOC (core)** | 143 | 1277+ | 1071 |
 | **Structure** | Single file | Modular | Single file |
 | **Textual v** | 0.85.0+ | 0.27.0 | N/A (API) |
