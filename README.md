@@ -109,7 +109,7 @@ rwreader
 ### Navigation
 
 | Key | Action |
-|-----|--------|
+| --- | ------ |
 | `j` / `↓` | Move down in current pane |
 | `k` / `↑` | Move up in current pane |
 | `J` | Next category |
@@ -120,7 +120,7 @@ rwreader
 ### Jump to Category
 
 | Key | Category |
-|-----|----------|
+| --- | -------- |
 | `I` | Go to Inbox |
 | `F` | Go to Feed |
 | `L` | Go to Later |
@@ -129,7 +129,7 @@ rwreader
 ### Article Actions
 
 | Key | Action |
-|-----|--------|
+| --- | ------ |
 | `a` | Move to Archive |
 | `l` | Move to Later |
 | `i` | Move to Inbox |
@@ -141,7 +141,7 @@ rwreader
 ### Link Management
 
 | Key | Action |
-|-----|--------|
+| --- | ------ |
 | `Ctrl+O` | Open article links (choose which to open) |
 | `Ctrl+S` | Save link (download) |
 | `Ctrl+L` | Add link to Readwise |
@@ -150,7 +150,7 @@ rwreader
 ### App Controls
 
 | Key | Action |
-|-----|--------|
+| --- | ------ |
 | `h` / `?` | Show/hide help |
 | `d` | Toggle dark/light mode |
 | `c` | Clear content pane |
