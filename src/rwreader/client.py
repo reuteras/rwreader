@@ -23,6 +23,10 @@ from .exceptions import (
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
+# Retry configuration for handling server-side caching
+RETRY_MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 0.5
+
 
 async def create_readwise_client(token: str) -> "ReadwiseClient":
     """Create a ReadwiseClient instance asynchronously.
@@ -96,6 +100,19 @@ class ReadwiseClient:
             cache_key="inbox", api_location="new", refresh=refresh, limit=limit
         )
 
+    def get_inbox_with_retry(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Get inbox articles with retry polling to handle server-side caching.
+
+        Args:
+            limit: Maximum number of items to return
+
+        Returns:
+            List of inbox articles in dict format
+        """
+        return self._get_category_with_retry(
+            cache_key="inbox", api_location="new", limit=limit
+        )
+
     def get_feed(
         self, refresh: bool = False, limit: int | None = None
     ) -> list[dict[str, Any]]:
@@ -110,6 +127,19 @@ class ReadwiseClient:
         """
         return self._get_category(
             cache_key="feed", api_location="feed", refresh=refresh, limit=limit
+        )
+
+    def get_feed_with_retry(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Get feed articles with retry polling to handle server-side caching.
+
+        Args:
+            limit: Maximum number of items to return
+
+        Returns:
+            List of feed articles in dict format
+        """
+        return self._get_category_with_retry(
+            cache_key="feed", api_location="feed", limit=limit
         )
 
     def get_later(
@@ -128,6 +158,19 @@ class ReadwiseClient:
             cache_key="later", api_location="later", refresh=refresh, limit=limit
         )
 
+    def get_later_with_retry(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Get later articles with retry polling to handle server-side caching.
+
+        Args:
+            limit: Maximum number of items to return
+
+        Returns:
+            List of later articles in dict format
+        """
+        return self._get_category_with_retry(
+            cache_key="later", api_location="later", limit=limit
+        )
+
     def get_archive(
         self, refresh: bool = False, limit: int | None = None, timeframe: str = "month"
     ) -> list[dict[str, Any]]:
@@ -143,19 +186,19 @@ class ReadwiseClient:
         """
         cache: dict[str, Any] = self._category_cache["archive"]
 
-        # Check if we should use the cache (and if timeframe matches)
+        # CACHING DISABLED: Always fetch fresh data to prevent stale counts
+        # current_time: float = time.time()
+        # cache_age: float = current_time - cache["last_updated"]
+        # if (
+        #     not refresh
+        #     and cache["data"]
+        #     and cache_age < self._cache_expiry
+        #     and cache.get("timeframe") == timeframe
+        # ):
+        #     data = cast(list[dict[str, Any]], cache["data"])
+        #     return data[:limit] if limit else data
+
         current_time: float = time.time()
-        cache_age: float = current_time - cache["last_updated"]
-
-        if (
-            not refresh
-            and cache["data"]
-            and cache_age < self._cache_expiry
-            and cache.get("timeframe") == timeframe
-        ):
-            data = cast(list[dict[str, Any]], cache["data"])
-            return data[:limit] if limit else data
-
         try:
             # Calculate the date range based on timeframe
             updated_after: datetime.datetime = self._get_date_for_timeframe(
@@ -196,6 +239,63 @@ class ReadwiseClient:
             # Return whatever we have in the cache
             data = cast(list[dict[str, Any]], cache["data"])
             return data[:limit] if limit else data
+
+    def _get_category_with_retry(
+        self,
+        cache_key: str,
+        api_location: str,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get articles with retry polling to handle server-side caching.
+
+        This method fetches category data multiple times until the count stabilizes,
+        which helps handle server-side caching issues where the API returns stale data
+        immediately after a move/delete operation.
+
+        Args:
+            cache_key: Category key for cache (inbox, feed, later)
+            api_location: Location value for readwise-api (new, feed, later)
+            limit: Maximum number of items to return
+
+        Returns:
+            List of articles in dict format
+        """
+        logger.info(
+            f"Fetching {cache_key} with retry polling (max {RETRY_MAX_ATTEMPTS} attempts)"
+        )
+
+        previous_count = None
+        articles = []
+
+        for attempt in range(1, RETRY_MAX_ATTEMPTS + 1):
+            # Fetch from API
+            articles = self._get_category(
+                cache_key=cache_key,
+                api_location=api_location,
+                refresh=True,
+                limit=limit,
+            )
+            current_count = len(articles)
+
+            logger.info(
+                f"Attempt {attempt}/{RETRY_MAX_ATTEMPTS}: Got {current_count} articles for {cache_key}"
+            )
+
+            # Check if count has stabilized (same as previous attempt)
+            if previous_count is not None and current_count == previous_count:
+                logger.info(
+                    f"Count stabilized at {current_count} for {cache_key} after {attempt} attempts"
+                )
+                break
+
+            previous_count = current_count
+
+            # Wait before next retry (unless this is the last attempt)
+            if attempt < RETRY_MAX_ATTEMPTS:
+                logger.debug(f"Waiting {RETRY_DELAY_SECONDS}s before retry...")
+                time.sleep(RETRY_DELAY_SECONDS)
+
+        return articles
 
     def _get_date_for_timeframe(self, timeframe: str) -> datetime.datetime:
         """Get a date based on the specified timeframe.
@@ -240,35 +340,33 @@ class ReadwiseClient:
         """
         cache: dict[str, Any] = self._category_cache[cache_key]
 
-        # Check if we should use the cache
-        current_time: float = time.time()
-        cache_age: float = current_time - cache["last_updated"]
-
+        # CACHING DISABLED: Always fetch fresh data to prevent stale counts
+        # Previous caching logic caused issues with counts not updating after moves
+        # current_time: float = time.time()
+        # cache_age: float = current_time - cache["last_updated"]
         # Only use cache if: not refreshing, has data, and not expired
-        if not refresh and cache["data"] and cache_age < self._cache_expiry:
-            data = cast(list[dict[str, Any]], cache["data"])
-            return data[:limit] if limit else data
+        # if not refresh and cache["data"] and cache_age < self._cache_expiry:
+        #     data = cast(list[dict[str, Any]], cache["data"])
+        #     return data[:limit] if limit else data
 
         # Get fresh data from the API
-
-        # If we've already completed a full load and we're not explicitly refreshing,
-        # just update the timestamp and return the cached data
-        if cache["complete"] and not refresh:
-            data = cast(list[dict[str, Any]], cache["data"])
-            return data[:limit] if limit else data
+        current_time: float = time.time()
 
         try:
-            # If refreshing, reset the cache
-            if refresh:
-                cache["data"] = []
-                cache["complete"] = False
+            # Always reset the cache before fetching (caching disabled)
+            cache["data"] = []
+            cache["complete"] = False
 
             # Get documents without withHtmlContent first to avoid potential issues
             try:
                 # Add a timeout to prevent hanging
+                logger.debug(
+                    f"Fetching {cache_key} from API (location={api_location}, refresh={refresh})"
+                )
                 documents: list[Document] = self._api.get_documents(
                     location=api_location
                 )
+                logger.debug(f"API returned {len(documents)} documents for {cache_key}")
 
                 # Convert documents to our expected format - use a more efficient method
                 # for large datasets
@@ -281,6 +379,9 @@ class ReadwiseClient:
                 cache["last_updated"] = current_time
                 cache["complete"] = True
 
+                logger.debug(
+                    f"Returning {len(articles)} articles for {cache_key} (limit={limit})"
+                )
                 return articles[:limit] if limit else articles
 
             except Exception as e:
@@ -581,18 +682,21 @@ class ReadwiseClient:
             True if successful, False otherwise
         """
         try:
+            logger.info(f"Moving article {article_id} to inbox")
             success, response = readwise.update_document_location(
                 document_id=article_id,
                 location="new",  # 'new' is the v3 API name for inbox
             )
 
             if success:
+                logger.info(f"Successfully moved article {article_id} to inbox")
                 # Update cache
                 if article_id in self._article_cache:
                     self._article_cache[article_id]["archived"] = False
                     self._article_cache[article_id]["saved_for_later"] = False
 
                 self._invalidate_cache()
+                logger.debug("Cache invalidated after move to inbox")
                 return True
             else:
                 logger.error(
@@ -647,18 +751,21 @@ class ReadwiseClient:
             True if successful, False otherwise
         """
         try:
+            logger.info(f"Moving article {article_id} to archive")
             # Call the update_document_location function
             success, response = readwise.update_document_location(
                 document_id=article_id, location="archive"
             )
 
             if success:
+                logger.info(f"Successfully moved article {article_id} to archive")
                 # Update cache
                 if article_id in self._article_cache:
                     self._article_cache[article_id]["archived"] = True
                     self._article_cache[article_id]["saved_for_later"] = False
 
                 self._invalidate_cache()
+                logger.debug("Cache invalidated after move to archive")
                 return True
             else:
                 logger.error(

@@ -67,25 +67,21 @@ class ArticleListScreen(Screen):
         """Refresh articles when screen resumes (e.g., after returning from reader)."""
         logger.debug(f"ArticleListScreen resumed, refreshing {self.category} articles")
         logger.debug(f"Current articles count: {len(self.articles)}")
-        # Simply repopulate the list with current articles
-        # The article_list may have been modified by the reader (e.g., items removed)
-        # So we just need to update the UI to reflect those changes
-        self.populate_list()
-        logger.debug(f"After populate_list, articles count: {len(self.articles)}")
-        # Temporary debug notification to verify this is being called
-        self.notify(f"List refreshed: {len(self.articles)} articles", title="Debug")
+        # Clear cache and load immediately for fast display
+        if hasattr(self.app, "client"):
+            self.app.client.clear_cache()  # type: ignore
+        # Reload articles from API immediately
+        self.load_articles(load_more=False, from_refresh=True, use_retry=False)
+        # Schedule background verification to catch stale data
+        self.set_timer(0.75, self._verify_articles)
 
     def on_show(self) -> None:
         """Called when screen becomes visible."""
         logger.debug(f"ArticleListScreen shown, refreshing {self.category} articles")
-        logger.debug(f"Current articles count: {len(self.articles)}")
-        # Repopulate to reflect any changes made while in other screens
-        self.populate_list()
-        logger.debug(
-            f"After populate_list in on_show, articles count: {len(self.articles)}"
-        )
-        # Temporary debug notification
-        self.notify(f"List shown: {len(self.articles)} articles", title="Debug Show")
+        # on_show is called before on_resume, so we don't need to reload here
+        # Just repopulate with current data
+        if len(self.articles) > 0:
+            self.populate_list()
 
     def _update_refresh_animation(self) -> None:
         """Update the title with refresh animation."""
@@ -120,14 +116,18 @@ class ArticleListScreen(Screen):
         title.update(f"{self.category.upper()}")
 
     @work(exclusive=False, thread=True)
-    async def load_articles(
-        self, load_more: bool = False, from_refresh: bool = False
+    async def load_articles(  # noqa: PLR0912
+        self,
+        load_more: bool = False,
+        from_refresh: bool = False,
+        use_retry: bool = False,
     ) -> None:
         """Load articles from API.
 
         Args:
             load_more: If True, load more articles beyond initial page
             from_refresh: If True, this is a user-initiated refresh
+            use_retry: If True, use retry polling to handle server-side caching
         """
         # Start refresh animation if this is a refresh action (must be called from main thread)
         if from_refresh:
@@ -152,17 +152,38 @@ class ArticleListScreen(Screen):
             client = self.app.client  # type: ignore
 
             # Get articles for the selected category
+            # Use retry polling when requested to handle server-side caching
             # These calls are synchronous but run in worker thread thanks to @work(thread=True)
-            if self.category == "inbox":
+            limit = self.initial_page_size if not load_more else None
+
+            if use_retry and not load_more:
+                # Use retry polling to get accurate counts after moves
+                logger.info(f"Using retry polling to fetch {self.category} articles")
+                if self.category == "inbox":
+                    self.articles = client.get_inbox_with_retry(limit=limit)
+                elif self.category == "feed":
+                    all_feed = client.get_feed_with_retry(limit=limit)
+                    self.articles = [
+                        article
+                        for article in all_feed
+                        if article.get("first_opened_at") == ""
+                    ]
+                elif self.category == "later":
+                    self.articles = client.get_later_with_retry(limit=limit)
+                elif self.category == "archive":
+                    # Archive doesn't have a retry method yet, use regular
+                    self.articles = client.get_archive(refresh=True, limit=limit)
+            # Use regular fetch
+            elif self.category == "inbox":
                 self.articles = client.get_inbox(
                     refresh=not load_more,
-                    limit=self.initial_page_size if not load_more else None,
+                    limit=limit,
                 )
             elif self.category == "feed":
                 # Only show unread articles in feed
                 all_feed = client.get_feed(
                     refresh=not load_more,
-                    limit=self.initial_page_size if not load_more else None,
+                    limit=limit,
                 )
                 self.articles = [
                     article
@@ -172,12 +193,12 @@ class ArticleListScreen(Screen):
             elif self.category == "later":
                 self.articles = client.get_later(
                     refresh=not load_more,
-                    limit=self.initial_page_size if not load_more else None,
+                    limit=limit,
                 )
             elif self.category == "archive":
                 self.articles = client.get_archive(
                     refresh=not load_more,
-                    limit=self.initial_page_size if not load_more else None,
+                    limit=limit,
                 )
 
             # Populate the list (must be called from main thread)
@@ -199,6 +220,12 @@ class ArticleListScreen(Screen):
             # Stop refresh animation (must be called from main thread)
             if from_refresh:
                 self.app.call_from_thread(self._stop_refresh_animation)
+
+    def _verify_articles(self) -> None:
+        """Background verification of article list after initial load."""
+        logger.debug(f"Running background verification of {self.category} articles")
+        # Load again to check if list has changed (server-side cache may have cleared)
+        self.load_articles(load_more=False, from_refresh=False, use_retry=False)
 
     def populate_list(self) -> None:
         """Populate ListView with articles."""

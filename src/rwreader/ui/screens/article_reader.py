@@ -222,10 +222,8 @@ class ArticleReaderScreen(Screen):
                     logger.debug(
                         f"After removal: {len(self.article_list)} articles remaining"
                     )
-                    # Temporary debug notification
-                    self.notify(
-                        f"Removed '{removed_article.get('title', 'Unknown')[:30]}', {len(self.article_list)} left",
-                        title="Debug",
+                    logger.debug(
+                        f"Removed '{removed_article.get('title', 'Unknown')[:30]}', {len(self.article_list)} left"
                     )
                     # Adjust index if needed
                     if self.current_index >= len(self.article_list):

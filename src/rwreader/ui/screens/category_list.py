@@ -53,8 +53,12 @@ class CategoryListScreen(Screen):
     async def on_resume(self) -> None:
         """Refresh category counts when screen resumes."""
         logger.debug("CategoryListScreen resumed, refreshing counts")
-        # Reload categories to reflect any changes made in other screens
-        self.load_categories(refresh=True)
+        # Clear cache and load immediately for fast display
+        if hasattr(self.app, "client"):
+            self.app.client.clear_cache()  # type: ignore
+        self.load_categories(refresh=True, use_retry=False)
+        # Schedule background verification to catch stale data
+        self.set_timer(0.75, self._verify_counts)
 
     def _update_refresh_animation(self) -> None:
         """Update the title with refresh animation."""
@@ -89,11 +93,14 @@ class CategoryListScreen(Screen):
         title.update("Select a category to browse articles")
 
     @work(exclusive=False, thread=True)
-    async def load_categories(self, refresh: bool = False) -> None:
+    async def load_categories(
+        self, refresh: bool = False, use_retry: bool = False
+    ) -> None:
         """Load category counts from API.
 
         Args:
             refresh: Whether to force refresh from API (default: False)
+            use_retry: Whether to use retry polling to handle server-side caching (default: False)
         """
         # Start refresh animation if refreshing (must be called from the main thread)
         if refresh:
@@ -116,19 +123,25 @@ class CategoryListScreen(Screen):
             client = self.app.client  # type: ignore
 
             # Fetch data from API (or cache if not refreshing)
-            # Use refresh=True to force API call, otherwise use cache if available
+            # Use retry polling when requested to handle server-side caching
             # These calls are synchronous but run in worker thread thanks to @work(thread=True)
-            logger.debug("Fetching inbox data...")
-            inbox_data = client.get_inbox(refresh=refresh)
-            logger.debug(f"Got {len(inbox_data)} inbox items")
+            if use_retry:
+                logger.info("Using retry polling to fetch category data")
+                inbox_data = client.get_inbox_with_retry()
+                feed_data = client.get_feed_with_retry()
+                later_data = client.get_later_with_retry()
+            else:
+                logger.debug("Fetching inbox data...")
+                inbox_data = client.get_inbox(refresh=refresh)
+                logger.debug(f"Got {len(inbox_data)} inbox items")
 
-            logger.debug("Fetching feed data...")
-            feed_data = client.get_feed(refresh=refresh)
-            logger.debug(f"Got {len(feed_data)} feed items")
+                logger.debug("Fetching feed data...")
+                feed_data = client.get_feed(refresh=refresh)
+                logger.debug(f"Got {len(feed_data)} feed items")
 
-            logger.debug("Fetching later data...")
-            later_data = client.get_later(refresh=refresh)
-            logger.debug(f"Got {len(later_data)} later items")
+                logger.debug("Fetching later data...")
+                later_data = client.get_later(refresh=refresh)
+                logger.debug(f"Got {len(later_data)} later items")
 
             # Calculate counts
             inbox_count = len(inbox_data) if inbox_data else 0
@@ -167,6 +180,12 @@ class CategoryListScreen(Screen):
             # Stop refresh animation (must be called from main thread)
             if refresh:
                 self.app.call_from_thread(self._stop_refresh_animation)
+
+    def _verify_counts(self) -> None:
+        """Background verification of category counts after initial load."""
+        logger.debug("Running background verification of category counts")
+        # Load again to check if counts have changed (server-side cache may have cleared)
+        self.load_categories(refresh=True, use_retry=False)
 
     def populate_list(self) -> None:
         """Populate the ListView with categories."""
