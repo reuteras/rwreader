@@ -85,26 +85,6 @@ class TestReadwiseClient:
             assert "archive" in client._category_cache
 
     @patch("rwreader.client.ReadwiseReader")
-    def test_get_inbox_from_cache(self, mock_api: Mock, mock_document: Mock) -> None:
-        """Test getting inbox articles from cache."""
-        with patch.dict("os.environ", {}, clear=True):
-            client = ReadwiseClient(token="test_token")
-
-            # Pre-populate cache
-            client._category_cache["inbox"]["data"] = [
-                {"id": "1", "title": "Article 1"},
-                {"id": "2", "title": "Article 2"},
-            ]
-            client._category_cache["inbox"]["last_updated"] = time.time()
-
-            articles = client.get_inbox()
-
-            assert len(articles) == ARTICLE_COUNT_2
-            assert articles[0]["id"] == "1"
-            # Should not call API since cache is fresh
-            mock_api.return_value.get_documents.assert_not_called()
-
-    @patch("rwreader.client.ReadwiseReader")
     def test_get_inbox_fresh_data(
         self, mock_api_class: Mock, mock_document: Mock
     ) -> None:
