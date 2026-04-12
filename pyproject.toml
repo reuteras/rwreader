@@ -29,7 +29,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "textual>=6.0.0",
+    "textual>=8.2.2",
     "httpx>=0.24.0",
     "rich>=13.3.5",
     "python-dotenv>=1.0.1",
