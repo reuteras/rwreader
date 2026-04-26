@@ -1132,7 +1132,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "readwise-api", git = "https://github.com/reuteras/readwise-api.git" },
     { name = "requests", specifier = ">=2.32.3" },
-    { name = "rich", specifier = ">=14.3.4" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "textual", specifier = ">=8.2.3" },
 ]
 
