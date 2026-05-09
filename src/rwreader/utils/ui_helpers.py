@@ -13,17 +13,29 @@ from ..utils.markdown_converter import (
 logger: logging.Logger = logging.getLogger(name=__name__)
 
 _HTML_CONTENT_FIELDS: list[str] = [
-    "html_content", "full_html", "html", "fullHtml", "webContent"
+    "html_content",
+    "full_html",
+    "html",
+    "fullHtml",
+    "webContent",
 ]
 _PLAIN_CONTENT_FIELDS: list[str] = [
-    "content", "text", "full_text", "article_text", "document", "body",
-    "articleContent", "fullText"
+    "content",
+    "text",
+    "full_text",
+    "article_text",
+    "document",
+    "body",
+    "articleContent",
+    "fullText",
 ]
 _EXCLUDED_FIELDS: set[str] = {"id", "title", "url", "author", "site_name"}
 _MIN_CONTENT_LENGTH = 100
 
 
-def _extract_article_content(article: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+def _extract_article_content(
+    article: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
     """Extract content from article dict."""
     html_content: str | None = None
     plain_content: str | None = None
@@ -37,7 +49,11 @@ def _extract_article_content(article: dict[str, Any]) -> tuple[str | None, str |
 
     if not html_content:
         for field in _PLAIN_CONTENT_FIELDS:
-            if article.get(field) and isinstance(article[field], str) and article[field]:
+            if (
+                article.get(field)
+                and isinstance(article[field], str)
+                and article[field]
+            ):
                 plain_content = article[field]
                 field_used = field
                 break

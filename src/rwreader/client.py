@@ -30,7 +30,11 @@ _MAX_ARTICLE_ID_LENGTH = 100
 def _handle_api_error(error: Exception, article_id: str) -> None:
     """Handle API errors and raise appropriate exceptions."""
     error_msg = str(error).lower()
-    if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
+    if (
+        "401" in error_msg
+        or "unauthorized" in error_msg
+        or "authentication" in error_msg
+    ):
         raise ReadwiseAuthenticationError(
             f"Authentication failed getting article {article_id}: {error}"
         ) from error
@@ -38,13 +42,20 @@ def _handle_api_error(error: Exception, article_id: str) -> None:
         raise ReadwiseRateLimitError(
             f"Rate limit exceeded getting article {article_id}: {error}"
         ) from error
-    if "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
+    if (
+        "500" in error_msg
+        or "502" in error_msg
+        or "503" in error_msg
+        or "server error" in error_msg
+    ):
         raise ReadwiseServerError(
             f"Readwise server error getting article {article_id}: {error}"
         ) from error
 
 
-def _extract_article_content(document: Document, article: dict[str, Any]) -> dict[str, Any]:
+def _extract_article_content(
+    document: Document, article: dict[str, Any]
+) -> dict[str, Any]:
     """Extract content from document and update article dict."""
     content_fields = ["content", "html_content", "summary", "excerpt", "text"]
     for field in content_fields:

@@ -56,7 +56,7 @@ def get_conf_value(op_command: str) -> str:
     if op_command.startswith("op "):
         try:
             parts = op_command.split()
-            _safe_part = re.compile(r'^[A-Za-z0-9_\-\./:@]+$')
+            _safe_part = re.compile(r"^[A-Za-z0-9_\-\./:@]+$")
             if not all(_safe_part.match(part) for part in parts):
                 logger.error(msg="Invalid characters in 1Password command")
                 print("Error: Invalid characters in 1Password command")

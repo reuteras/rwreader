@@ -37,9 +37,15 @@ def _is_private_ip(ip_parts: list[str]) -> bool:
     second = int(ip_parts[1])
     if first == _PRIVATE_NET_10_FIRST_OCTET:
         return True
-    if first == _PRIVATE_NET_172_FIRST_OCTET and _PRIVATE_NET_172_MIN_SECOND <= second <= _PRIVATE_NET_172_MAX_SECOND:
+    if (
+        first == _PRIVATE_NET_172_FIRST_OCTET
+        and _PRIVATE_NET_172_MIN_SECOND <= second <= _PRIVATE_NET_172_MAX_SECOND
+    ):
         return True
-    if first == _PRIVATE_NET_192_FIRST_OCTET and second == _PRIVATE_NET_168_SECOND_OCTET:
+    if (
+        first == _PRIVATE_NET_192_FIRST_OCTET
+        and second == _PRIVATE_NET_168_SECOND_OCTET
+    ):
         return True
     return False
 
@@ -415,7 +421,9 @@ def _validate_url(url: str) -> None:
         if netloc_lower.startswith("169.254."):
             raise ValueError(f"URL targets link-local address: {url}")
         # Check for private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
-        if netloc_lower.replace(".", "").isdigit() and _is_private_ip(netloc_lower.split(".")):
+        if netloc_lower.replace(".", "").isdigit() and _is_private_ip(
+            netloc_lower.split(".")
+        ):
             raise ValueError(f"URL targets private IP range: {url}")
 
     except Exception as e:
