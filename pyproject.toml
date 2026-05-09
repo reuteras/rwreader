@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rwreader"
-version = "0.1.2"
+version = "0.1.3"
 description = "A terminal user interface for Readwise Reader"
 authors = [
     {name = "Peter Reuterås", email = "peter@reuteras.net"},

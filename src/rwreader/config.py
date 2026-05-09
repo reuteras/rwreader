@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import re
 import subprocess
 import sys
 import tomllib
@@ -55,8 +56,8 @@ def get_conf_value(op_command: str) -> str:
     if op_command.startswith("op "):
         try:
             parts = op_command.split()
-            valid_parts = {"op", "read", "get", "item", "secret", "--token", "--format", "json", "stdout"}
-            if not all(part.isalnum() or part in valid_parts or part == "-" for part in parts):
+            _safe_part = re.compile(r'^[A-Za-z0-9_\-\./:@]+$')
+            if not all(_safe_part.match(part) for part in parts):
                 logger.error(msg="Invalid characters in 1Password command")
                 print("Error: Invalid characters in 1Password command")
                 sys.exit(1)
