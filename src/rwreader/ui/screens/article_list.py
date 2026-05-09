@@ -10,7 +10,11 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header, ListItem, ListView, Static
 
-from ...utils.ui_helpers import safe_get_article_display_title, safe_set_text_style
+from ...utils.ui_helpers import (
+    move_article_to_destination,
+    safe_get_article_display_title,
+    safe_set_text_style,
+)
 
 if TYPE_CHECKING:
     pass
@@ -281,12 +285,11 @@ class ArticleListScreen(Screen):
                 # Import ArticleReaderScreen
                 from .article_reader import ArticleReaderScreen  # noqa: PLC0415
 
-                # Pass article, article_list, and current_index
-                # This enables J/K navigation in reader
+                # Pass a copy of article_list to avoid mutable shared state
                 self.app.push_screen(
                     ArticleReaderScreen(
                         article=article,
-                        article_list=self.articles,
+                        article_list=list(self.articles),
                         current_index=self.current_index,
                         category=self.category,
                     )
@@ -304,12 +307,11 @@ class ArticleListScreen(Screen):
                 # Import ArticleReaderScreen
                 from .article_reader import ArticleReaderScreen  # noqa: PLC0415
 
-                # Pass article, article_list, and current_index
-                # This enables J/K navigation in reader
+                # Pass a copy of article_list to avoid mutable shared state
                 self.app.push_screen(
                     ArticleReaderScreen(
                         article=article,
-                        article_list=self.articles,
+                        article_list=list(self.articles),
                         current_index=self.current_index,
                         category=self.category,
                     )
@@ -349,31 +351,18 @@ class ArticleListScreen(Screen):
             self.notify("API client not available", severity="error")
             return
 
-        try:
-            client = self.app.client  # type: ignore
+        client = self.app.client  # type: ignore
+        success, message = move_article_to_destination(
+            client=client, article_id=article_id, destination=destination
+        )
 
-            # Move article based on destination
-            if destination == "archive":
-                success = client.move_to_archive(article_id=article_id)
-            elif destination == "later":
-                success = client.move_to_later(article_id=article_id)
-            elif destination == "inbox":
-                success = client.move_to_inbox(article_id=article_id)
-            else:
-                success = False
-
-            if success:
-                self.notify(f"Moved to {destination.capitalize()}", title="Success")
-                # Remove from current list if we're not viewing the destination category
-                if self.category != destination:
-                    self.articles.pop(index)
-                    self.populate_list()
-            else:
-                self.notify(f"Failed to move to {destination}", severity="error")
-
-        except Exception as e:
-            logger.error(f"Error moving article: {e}")
-            self.notify(f"Error: {e}", severity="error")
+        if success:
+            self.notify(message, title="Success")
+            if self.category != destination:
+                self.articles.pop(index)
+                self.populate_list()
+        else:
+            self.notify(message, severity="error")
 
     @work
     async def action_delete_article(self) -> None:

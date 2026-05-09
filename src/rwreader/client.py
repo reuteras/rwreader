@@ -3,6 +3,7 @@
 import datetime
 import logging
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
@@ -22,6 +23,38 @@ from .exceptions import (
 )
 
 logger: logging.Logger = logging.getLogger(name=__name__)
+
+_MAX_ARTICLE_ID_LENGTH = 100
+
+
+def _handle_api_error(error: Exception, article_id: str) -> None:
+    """Handle API errors and raise appropriate exceptions."""
+    error_msg = str(error).lower()
+    if "401" in error_msg or "unauthorized" in error_msg or "authentication" in error_msg:
+        raise ReadwiseAuthenticationError(
+            f"Authentication failed getting article {article_id}: {error}"
+        ) from error
+    if "429" in error_msg or "rate limit" in error_msg:
+        raise ReadwiseRateLimitError(
+            f"Rate limit exceeded getting article {article_id}: {error}"
+        ) from error
+    if "500" in error_msg or "502" in error_msg or "503" in error_msg or "server error" in error_msg:
+        raise ReadwiseServerError(
+            f"Readwise server error getting article {article_id}: {error}"
+        ) from error
+
+
+def _extract_article_content(document: Document, article: dict[str, Any]) -> dict[str, Any]:
+    """Extract content from document and update article dict."""
+    content_fields = ["content", "html_content", "summary", "excerpt", "text"]
+    for field in content_fields:
+        if hasattr(document, field):
+            value = getattr(document, field)
+            if value:
+                article[field] = value
+                break
+    return article
+
 
 # Retry configuration for handling server-side caching
 RETRY_MAX_ATTEMPTS = 3
@@ -80,6 +113,9 @@ class ReadwiseClient:
 
         # Thread executor for concurrent API requests
         self._executor = ThreadPoolExecutor(max_workers=3)
+
+        # Lock for thread-safe cache access
+        self._cache_lock = threading.Lock()
 
         # Create the ReadwiseReader client
         self._api = ReadwiseReader(token=token)
@@ -375,9 +411,10 @@ class ReadwiseClient:
                 ]
 
                 # Update the cache
-                cache["data"] = articles
-                cache["last_updated"] = current_time
-                cache["complete"] = True
+                with self._cache_lock:
+                    cache["data"] = articles
+                    cache["last_updated"] = current_time
+                    cache["complete"] = True
 
                 logger.debug(
                     f"Returning {len(articles)} articles for {cache_key} (limit={limit})"
@@ -498,13 +535,28 @@ class ReadwiseClient:
 
         Returns:
             Article data in dict format or None if not found
+
+        Raises:
+            ValueError: If article_id is invalid
         """
+        # Validate article_id - must be non-empty string with only safe characters
+        if not article_id or not isinstance(article_id, str):
+            raise ValueError("article_id must be a non-empty string")
+        if not article_id.strip():
+            raise ValueError("article_id cannot be empty or whitespace")
+        if len(article_id) > _MAX_ARTICLE_ID_LENGTH:
+            raise ValueError("article_id too long")
+        # Only allow alphanumeric, hyphens, underscores
+        if not all(c.isalnum() or c in "-_" for c in article_id):
+            raise ValueError("article_id contains invalid characters")
+
         # First, check if full article (with content) is in cache
-        if article_id in self._article_cache:
-            cached_article = self._article_cache[article_id]
-            # Check if the article in cache has content or html_content
-            if cached_article.get("content") or cached_article.get("html_content"):
-                return cached_article
+        with self._cache_lock:
+            if article_id in self._article_cache:
+                cached_article = self._article_cache[article_id]
+                # Check if the article in cache has content or html_content
+                if cached_article.get("content") or cached_article.get("html_content"):
+                    return cached_article
 
         try:
             # Get document by ID first without html content
@@ -512,32 +564,8 @@ class ReadwiseClient:
             try:
                 document = self._api.get_document_by_id(id=article_id)
             except Exception as doc_error:
-                error_msg = str(doc_error).lower()
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
-
-                # Check for critical error types only
-                if (
-                    "401" in error_msg
-                    or "unauthorized" in error_msg
-                    or "authentication" in error_msg
-                ):
-                    raise ReadwiseAuthenticationError(
-                        f"Authentication failed getting article {article_id}: {doc_error}"
-                    ) from doc_error
-                elif "429" in error_msg or "rate limit" in error_msg:
-                    raise ReadwiseRateLimitError(
-                        f"Rate limit exceeded getting article {article_id}: {doc_error}"
-                    ) from doc_error
-                elif (
-                    "500" in error_msg
-                    or "502" in error_msg
-                    or "503" in error_msg
-                    or "server error" in error_msg
-                ):
-                    raise ReadwiseServerError(
-                        f"Readwise server error getting article {article_id}: {doc_error}"
-                    ) from doc_error
-                # For 404 and other errors, let document remain None and return None below
+                _handle_api_error(doc_error, article_id)
 
             if document:
                 # Create base article dict from the document
@@ -654,7 +682,8 @@ class ReadwiseClient:
                         article["content"] = document.content
 
                 # Store in cache
-                self._article_cache[article_id] = article
+                with self._cache_lock:
+                    self._article_cache[article_id] = article
                 return article
             else:
                 logger.warning(msg=f"No article found with ID {article_id}")
@@ -664,11 +693,12 @@ class ReadwiseClient:
             logger.error(msg=f"Error fetching article {article_id}: {e}")
 
             # Return what we have in cache even if incomplete
-            if article_id in self._article_cache:
-                logger.warning(
-                    msg=f"Returning cached article for {article_id} without full content"
-                )
-                return self._article_cache[article_id]
+            with self._cache_lock:
+                if article_id in self._article_cache:
+                    logger.warning(
+                        msg=f"Returning cached article for {article_id} without full content"
+                    )
+                    return self._article_cache[article_id]
 
             return None
 
@@ -691,9 +721,10 @@ class ReadwiseClient:
             if success:
                 logger.info(f"Successfully moved article {article_id} to inbox")
                 # Update cache
-                if article_id in self._article_cache:
-                    self._article_cache[article_id]["archived"] = False
-                    self._article_cache[article_id]["saved_for_later"] = False
+                with self._cache_lock:
+                    if article_id in self._article_cache:
+                        self._article_cache[article_id]["archived"] = False
+                        self._article_cache[article_id]["saved_for_later"] = False
 
                 self._invalidate_cache()
                 logger.debug("Cache invalidated after move to inbox")
@@ -725,9 +756,10 @@ class ReadwiseClient:
 
             if success:
                 # Update cache
-                if article_id in self._article_cache:
-                    self._article_cache[article_id]["archived"] = False
-                    self._article_cache[article_id]["saved_for_later"] = True
+                with self._cache_lock:
+                    if article_id in self._article_cache:
+                        self._article_cache[article_id]["archived"] = False
+                        self._article_cache[article_id]["saved_for_later"] = True
 
                 self._invalidate_cache()
                 return True
@@ -760,9 +792,10 @@ class ReadwiseClient:
             if success:
                 logger.info(f"Successfully moved article {article_id} to archive")
                 # Update cache
-                if article_id in self._article_cache:
-                    self._article_cache[article_id]["archived"] = True
-                    self._article_cache[article_id]["saved_for_later"] = False
+                with self._cache_lock:
+                    if article_id in self._article_cache:
+                        self._article_cache[article_id]["archived"] = True
+                        self._article_cache[article_id]["saved_for_later"] = False
 
                 self._invalidate_cache()
                 logger.debug("Cache invalidated after move to archive")
@@ -849,23 +882,24 @@ class ReadwiseClient:
         Args:
             category: Category to invalidate
         """
-        if category in self._category_cache:
-            # Preserve the timeframe for archive
-            timeframe = (
-                self._category_cache[category].get("timeframe", "month")
-                if category == "archive"
-                else None
-            )
+        with self._cache_lock:
+            if category in self._category_cache:
+                # Preserve the timeframe for archive
+                timeframe = (
+                    self._category_cache[category].get("timeframe", "month")
+                    if category == "archive"
+                    else None
+                )
 
-            self._category_cache[category] = {
-                "data": [],
-                "last_updated": 0,
-                "complete": False,
-            }
+                self._category_cache[category] = {
+                    "data": [],
+                    "last_updated": 0,
+                    "complete": False,
+                }
 
-            # Restore timeframe for archive
-            if category == "archive" and timeframe:
-                self._category_cache[category]["timeframe"] = timeframe
+                # Restore timeframe for archive
+                if category == "archive" and timeframe:
+                    self._category_cache[category]["timeframe"] = timeframe
 
     def _invalidate_cache(self) -> None:
         """Invalidate all caches."""

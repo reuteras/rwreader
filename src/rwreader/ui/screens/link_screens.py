@@ -1,6 +1,7 @@
 """Link selection screen."""
 
 import logging
+import re
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -85,6 +86,10 @@ class LinkSelectionScreen(ModalScreen):
         )
         link_list.focus()
 
+    def on_unmount(self) -> None:
+        """Clean up HTTP client when screen is unmounted."""
+        self.http_client.close()
+
     def _format_link_item(self, link: tuple) -> str:
         """Format a link for display in the list.
 
@@ -127,6 +132,41 @@ class LinkSelectionScreen(ModalScreen):
                 url = url[: max_line_length - 3] + "..."
 
         return f"{title}\n{url}"
+
+    def _sanitize_filename(self, filename: str) -> str:
+        """Sanitize filename to prevent path traversal and injection.
+
+        Args:
+            filename: Raw filename from URL
+
+        Returns:
+            Sanitized filename safe for filesystem use
+        """
+        # Remove any path components (keep only basename)
+        filename = Path(filename).name
+
+        # Remove or replace dangerous characters
+        # Allow only alphanumeric, dash, underscore, dot
+        filename = re.sub(r"[^\w\-.]", "_", filename)
+
+        # Remove leading dots (hidden files)
+        filename = filename.lstrip(".")
+
+        # Limit length
+        max_length = 200
+        if len(filename) > max_length:
+            # Keep extension if present
+            if "." in filename:
+                name, ext = filename.rsplit(".", 1)
+                filename = name[: max_length - len(ext) - 1] + "." + ext
+            else:
+                filename = filename[:max_length]
+
+        # Default if empty
+        if not filename:
+            filename = "downloaded_file"
+
+        return filename
 
     def action_cancel(self) -> None:
         """Close the screen without taking action."""
@@ -222,12 +262,28 @@ class LinkSelectionScreen(ModalScreen):
         """
         try:
             # Extract filename from URL
-            filename: str = Path(urlparse(url=link).path).name
-            if not filename:
-                filename = "downloaded_file"
+            raw_filename: str = Path(urlparse(url=link).path).name
+            if not raw_filename:
+                raw_filename = "downloaded_file"
 
-            # Download the file
-            download_path = self.configuration.download_folder / filename
+            # Sanitize filename to prevent path traversal
+            filename = self._sanitize_filename(raw_filename)
+
+            # Resolve to ensure it's within download folder
+            download_path = (self.configuration.download_folder / filename).resolve()
+
+            # Verify the resolved path is still within the download folder
+            try:
+                download_path.relative_to(self.configuration.download_folder.resolve())
+            except ValueError:
+                logger.error(msg=f"Path traversal attempt detected: {filename}")
+                self.notify(
+                    title="Download Error",
+                    message="Invalid filename",
+                    timeout=5,
+                    severity="error",
+                )
+                return
 
             with self.http_client.stream(method="GET", url=link) as response:
                 response.raise_for_status()

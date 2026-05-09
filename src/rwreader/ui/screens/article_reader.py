@@ -12,7 +12,7 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
-from ...utils.ui_helpers import format_article_content
+from ...utils.ui_helpers import format_article_content, move_article_to_destination
 from ..widgets.linkable_markdown_viewer import LinkableMarkdownViewer
 
 if TYPE_CHECKING:
@@ -186,7 +186,7 @@ class ArticleReaderScreen(Screen):
         """Move this article to Inbox."""
         await self._move_article("inbox")
 
-    async def _move_article(self, destination: str) -> None:  # noqa: PLR0912
+    async def _move_article(self, destination: str) -> None:
         """Move the current article to a destination.
 
         Args:
@@ -196,55 +196,40 @@ class ArticleReaderScreen(Screen):
             self.notify("API client not available", severity="error")
             return
 
-        try:
-            client = self.app.client  # type: ignore
-            article_id = str(self.article.get("id"))
+        client = self.app.client  # type: ignore
+        article_id = str(self.article.get("id"))
 
-            # Move article based on destination
-            if destination == "archive":
-                success = client.move_to_archive(article_id=article_id)
-            elif destination == "later":
-                success = client.move_to_later(article_id=article_id)
-            elif destination == "inbox":
-                success = client.move_to_inbox(article_id=article_id)
-            else:
-                success = False
+        success, message = move_article_to_destination(
+            client=client, article_id=article_id, destination=destination
+        )
 
-            if success:
-                self.notify(f"Moved to {destination.capitalize()}", title="Success")
-                # Auto-advance to next article if not in destination category
-                if self.category != destination:
-                    logger.debug(
-                        f"Removing article at index {self.current_index} from list of {len(self.article_list)} articles"
-                    )
-                    # Remove from article list
-                    removed_article = self.article_list.pop(self.current_index)
-                    logger.debug(
-                        f"After removal: {len(self.article_list)} articles remaining"
-                    )
-                    logger.debug(
-                        f"Removed '{removed_article.get('title', 'Unknown')[:30]}', {len(self.article_list)} left"
-                    )
-                    # Adjust index if needed
-                    if self.current_index >= len(self.article_list):
-                        self.current_index = len(self.article_list) - 1
-                    # Load next article or go back if list is empty
-                    if len(self.article_list) > 0:
-                        self.article = self.article_list[self.current_index]
-                        self.refresh_article()
-                    else:
-                        self.notify("No more articles", title="Info")
-                        self.app.pop_screen()
+        if success:
+            self.notify(message, title="Success")
+            if self.category != destination:
+                logger.debug(
+                    f"Removing article at index {self.current_index} from list of {len(self.article_list)} articles"
+                )
+                removed_article = self.article_list.pop(self.current_index)
+                logger.debug(
+                    f"After removal: {len(self.article_list)} articles remaining"
+                )
+                logger.debug(
+                    f"Removed '{removed_article.get('title', 'Unknown')[:30]}', {len(self.article_list)} left"
+                )
+                if self.current_index >= len(self.article_list):
+                    self.current_index = len(self.article_list) - 1
+                if len(self.article_list) > 0:
+                    self.article = self.article_list[self.current_index]
+                    self.refresh_article()
                 else:
-                    logger.debug(
-                        f"Article moved to {destination} which is same as current category {self.category}, not removing from list"
-                    )
+                    self.notify("No more articles", title="Info")
+                    self.app.pop_screen()
             else:
-                self.notify(f"Failed to move to {destination}", severity="error")
-
-        except Exception as e:
-            logger.error(f"Error moving article: {e}")
-            self.notify(f"Error: {e}", severity="error")
+                logger.debug(
+                    f"Article moved to {destination} which is same as current category {self.category}, not removing from list"
+                )
+        else:
+            self.notify(message, severity="error")
 
     @work
     async def action_delete(self) -> None:

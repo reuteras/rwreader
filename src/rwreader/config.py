@@ -54,8 +54,14 @@ def get_conf_value(op_command: str) -> str:
     """
     if op_command.startswith("op "):
         try:
+            parts = op_command.split()
+            valid_parts = {"op", "read", "get", "item", "secret", "--token", "--format", "json", "stdout"}
+            if not all(part.isalnum() or part in valid_parts or part == "-" for part in parts):
+                logger.error(msg="Invalid characters in 1Password command")
+                print("Error: Invalid characters in 1Password command")
+                sys.exit(1)
             result: subprocess.CompletedProcess[str] = subprocess.run(
-                args=op_command.split(), capture_output=True, text=True, check=True
+                args=parts, capture_output=True, text=True, check=True
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as err:

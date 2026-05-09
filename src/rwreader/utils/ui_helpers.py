@@ -12,6 +12,50 @@ from ..utils.markdown_converter import (
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
+_HTML_CONTENT_FIELDS: list[str] = [
+    "html_content", "full_html", "html", "fullHtml", "webContent"
+]
+_PLAIN_CONTENT_FIELDS: list[str] = [
+    "content", "text", "full_text", "article_text", "document", "body",
+    "articleContent", "fullText"
+]
+_EXCLUDED_FIELDS: set[str] = {"id", "title", "url", "author", "site_name"}
+_MIN_CONTENT_LENGTH = 100
+
+
+def _extract_article_content(article: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    """Extract content from article dict."""
+    html_content: str | None = None
+    plain_content: str | None = None
+    field_used: str | None = None
+
+    for field in _HTML_CONTENT_FIELDS:
+        if article.get(field) and isinstance(article[field], str) and article[field]:
+            html_content = article[field]
+            field_used = field
+            break
+
+    if not html_content:
+        for field in _PLAIN_CONTENT_FIELDS:
+            if article.get(field) and isinstance(article[field], str) and article[field]:
+                plain_content = article[field]
+                field_used = field
+                break
+
+    if not html_content and not plain_content:
+        largest_field: str | None = None
+        largest_size = 0
+        for field, value in article.items():
+            if isinstance(value, str) and len(value) > _MIN_CONTENT_LENGTH:
+                if field not in _EXCLUDED_FIELDS and len(value) > largest_size:
+                    largest_size = len(value)
+                    largest_field = field
+        if largest_field:
+            plain_content = article[largest_field]
+            field_used = largest_field
+
+    return html_content, plain_content, field_used
+
 
 def safe_set_text_style(item: Any, style: str) -> None:
     """Safely set text style for a UI item with validation.
@@ -324,3 +368,39 @@ def safe_parse_article_data(data: Any) -> dict[str, Any]:
             data[field] = f"Missing {field}" if field != "id" else "unknown"
 
     return data
+
+
+def move_article_to_destination(
+    client: Any, article_id: str, destination: str
+) -> tuple[bool, str]:
+    """Move an article to a destination category.
+
+    Args:
+        client: ReadwiseClient instance
+        article_id: ID of the article to move
+        destination: Target location (inbox, later, archive)
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    if not hasattr(client, "move_to_archive"):
+        return False, "API client not available"
+
+    try:
+        if destination == "archive":
+            success = client.move_to_archive(article_id=article_id)
+        elif destination == "later":
+            success = client.move_to_later(article_id=article_id)
+        elif destination == "inbox":
+            success = client.move_to_inbox(article_id=article_id)
+        else:
+            return False, f"Unknown destination: {destination}"
+
+        if success:
+            return True, f"Moved to {destination.capitalize()}"
+        else:
+            return False, f"Failed to move to {destination}"
+
+    except Exception as e:
+        logger.error(msg=f"Error moving article: {e}")
+        return False, f"Error: {e}"

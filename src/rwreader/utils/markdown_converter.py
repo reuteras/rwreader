@@ -12,6 +12,37 @@ from markdownify import markdownify as md
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
+_MAX_ARTICLE_ID_LENGTH = 100
+_IPV4_OCTET_COUNT = 4
+_PRIVATE_NET_10_FIRST_OCTET = 10
+_PRIVATE_NET_172_FIRST_OCTET = 172
+_PRIVATE_NET_172_MIN_SECOND = 16
+_PRIVATE_NET_172_MAX_SECOND = 31
+_PRIVATE_NET_192_FIRST_OCTET = 192
+_PRIVATE_NET_168_SECOND_OCTET = 168
+
+
+def _is_private_ip(ip_parts: list[str]) -> bool:
+    """Check if IP parts represent a private IP address.
+
+    Args:
+        ip_parts: List of IP octets as strings
+
+    Returns:
+        True if the IP is in a private range
+    """
+    if len(ip_parts) != _IPV4_OCTET_COUNT:
+        return False
+    first = int(ip_parts[0])
+    second = int(ip_parts[1])
+    if first == _PRIVATE_NET_10_FIRST_OCTET:
+        return True
+    if first == _PRIVATE_NET_172_FIRST_OCTET and _PRIVATE_NET_172_MIN_SECOND <= second <= _PRIVATE_NET_172_MAX_SECOND:
+        return True
+    if first == _PRIVATE_NET_192_FIRST_OCTET and second == _PRIVATE_NET_168_SECOND_OCTET:
+        return True
+    return False
+
 
 def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
     """Convert HTML to well-formatted markdown with enhanced fallbacks.
@@ -369,17 +400,23 @@ def _validate_url(url: str) -> None:
                 f"Only HTTP and HTTPS URLs are allowed, got: {parsed.scheme}"
             )
 
-        # Warn about localhost/private IPs to prevent SSRF
+        # Block localhost/private IPs to prevent SSRF attacks
         netloc_lower = parsed.netloc.lower()
         private_patterns = [
             "localhost",
             "127.0.0.1",
             "0.0.0.0",
             "::1",
-            "169.254",  # Link-local
         ]
+        # Check for direct localhost/private hostnames
         if any(pattern in netloc_lower for pattern in private_patterns):
-            logger.warning(msg=f"URL uses local/private network: {url}")
+            raise ValueError(f"URL targets local/private network: {url}")
+        # Check for link-local addresses (169.254.x.x)
+        if netloc_lower.startswith("169.254."):
+            raise ValueError(f"URL targets link-local address: {url}")
+        # Check for private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+        if netloc_lower.replace(".", "").isdigit() and _is_private_ip(netloc_lower.split(".")):
+            raise ValueError(f"URL targets private IP range: {url}")
 
     except Exception as e:
         raise ValueError(f"Invalid URL: {e}") from e
