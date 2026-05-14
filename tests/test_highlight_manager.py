@@ -25,7 +25,9 @@ class TestInjectHighlightsIntoMarkdown:
     def test_appends_highlights_section(self) -> None:
         """A Highlights section is always appended when highlights exist."""
         md = "# Title\n\nSome text."
-        result = inject_highlights_into_markdown(md, [{"content": "Some text.", "notes": None}])
+        result = inject_highlights_into_markdown(
+            md, [{"content": "Some text.", "notes": None}]
+        )
         assert "## Highlights" in result
         assert "> Some text." in result
 
@@ -47,7 +49,9 @@ class TestInjectHighlightsIntoMarkdown:
     def test_null_notes_not_rendered(self) -> None:
         """A null notes value produces no Note: line."""
         md = "# Title\n\nSome text."
-        result = inject_highlights_into_markdown(md, [{"content": "Some text.", "notes": None}])
+        result = inject_highlights_into_markdown(
+            md, [{"content": "Some text.", "notes": None}]
+        )
         assert "Note:" not in result
 
     def test_missing_content_field_skipped(self) -> None:
@@ -115,7 +119,10 @@ class TestGetHighlightsForDocument:
         assert get_highlights_for_document("") == []
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
     def test_parses_list_response(self, _cli: MagicMock, mock_run: MagicMock) -> None:
         """Parses a JSON list returned by the CLI."""
         payload = [{"id": "abc", "content": "Some text", "tags": [], "notes": None}]
@@ -127,24 +134,41 @@ class TestGetHighlightsForDocument:
         assert result[0]["content"] == "Some text"
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
-    def test_returns_empty_on_cli_error(self, _cli: MagicMock, mock_run: MagicMock) -> None:
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
+    def test_returns_empty_on_cli_error(
+        self, _cli: MagicMock, mock_run: MagicMock
+    ) -> None:
         """Returns empty list when CLI exits with non-zero code."""
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
         assert get_highlights_for_document("doc123") == []
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
-    def test_returns_empty_on_invalid_json(self, _cli: MagicMock, mock_run: MagicMock) -> None:
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
+    def test_returns_empty_on_invalid_json(
+        self, _cli: MagicMock, mock_run: MagicMock
+    ) -> None:
         """Returns empty list when CLI output is not valid JSON."""
         mock_run.return_value = MagicMock(returncode=0, stdout="not-json", stderr="")
         assert get_highlights_for_document("doc123") == []
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
-    def test_returns_empty_on_timeout(self, _cli: MagicMock, mock_run: MagicMock) -> None:
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
+    def test_returns_empty_on_timeout(
+        self, _cli: MagicMock, mock_run: MagicMock
+    ) -> None:
         """Returns empty list on subprocess timeout."""
-        mock_run.side_effect = __import__("subprocess").TimeoutExpired(cmd="readwise", timeout=20)
+        mock_run.side_effect = __import__("subprocess").TimeoutExpired(
+            cmd="readwise", timeout=20
+        )
         assert get_highlights_for_document("doc123") == []
 
 
@@ -162,7 +186,10 @@ class TestCreateReaderHighlight:
         assert "not available" in msg
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
     def test_success(self, _cli: MagicMock, mock_run: MagicMock) -> None:
         """Returns success when CLI exits with code 0."""
         mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
@@ -171,16 +198,26 @@ class TestCreateReaderHighlight:
         assert "created" in msg.lower()
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
     def test_failure_returns_stderr(self, _cli: MagicMock, mock_run: MagicMock) -> None:
         """Returns failure when CLI exits with non-zero code."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Server error")
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="Server error"
+        )
         success, _msg = create_reader_highlight("doc123", "<p>text</p>")
         assert not success
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
-    def test_passes_document_id_and_html(self, _cli: MagicMock, mock_run: MagicMock) -> None:
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
+    def test_passes_document_id_and_html(
+        self, _cli: MagicMock, mock_run: MagicMock
+    ) -> None:
         """Verifies the CLI is called with the correct arguments."""
         mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
         create_reader_highlight("mydocid", "<p>highlight me</p>")
@@ -202,7 +239,10 @@ class TestDeleteHighlight:
         assert not success
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
     def test_success_with_string_id(self, _cli: MagicMock, mock_run: MagicMock) -> None:
         """Accepts Reader-style string highlight IDs."""
         mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
@@ -210,7 +250,10 @@ class TestDeleteHighlight:
         assert success
 
     @patch("rwreader.utils.highlight_manager.subprocess.run")
-    @patch("rwreader.utils.highlight_manager.get_cli_path", return_value="/usr/bin/readwise")
+    @patch(
+        "rwreader.utils.highlight_manager.get_cli_path",
+        return_value="/usr/bin/readwise",
+    )
     def test_success_with_int_id(self, _cli: MagicMock, mock_run: MagicMock) -> None:
         """Accepts classic Readwise integer highlight IDs."""
         mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")

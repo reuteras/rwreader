@@ -157,7 +157,9 @@ class ArticleReaderScreen(Screen):
 
             # Fetch highlights in background if CLI is available
             cli_available = is_readwise_cli_available()
-            logger.debug(f"Highlight CLI available: {cli_available}, article_id={article_id!r}")
+            logger.debug(
+                f"Highlight CLI available: {cli_available}, article_id={article_id!r}"
+            )
             if cli_available:
                 self.fetch_highlights(article_id=article_id)
 
@@ -189,11 +191,15 @@ class ArticleReaderScreen(Screen):
                 None,
                 lambda: get_highlights_for_document(article_id),
             )
-            logger.debug(f"fetch_highlights got {len(highlights)} highlights for {article_id!r}")
+            logger.debug(
+                f"fetch_highlights got {len(highlights)} highlights for {article_id!r}"
+            )
 
             # Guard: article may have changed while we were fetching
             current_id = str(self.article.get("id"))
-            logger.debug(f"fetch_highlights guard: current_id={current_id!r} article_id={article_id!r}")
+            logger.debug(
+                f"fetch_highlights guard: current_id={current_id!r} article_id={article_id!r}"
+            )
             if current_id != article_id:
                 logger.debug("fetch_highlights: article changed, discarding results")
                 return

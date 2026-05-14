@@ -75,11 +75,18 @@ def get_highlights_for_document(document_id: str) -> list[dict[str, Any]]:
         Returns empty list on error or if CLI is unavailable.
     """
     cli = get_cli_path()
-    logger.debug(f"get_highlights_for_document: cli={cli!r} document_id={document_id!r}")
+    logger.debug(
+        f"get_highlights_for_document: cli={cli!r} document_id={document_id!r}"
+    )
     if not cli or not document_id:
         return []
 
-    cmd = [cli, "--json", "reader-get-document-highlights", f"--document-id={document_id}"]
+    cmd = [
+        cli,
+        "--json",
+        "reader-get-document-highlights",
+        f"--document-id={document_id}",
+    ]
     logger.debug(f"Running: {' '.join(cmd)}")
     try:
         result = subprocess.run(
@@ -89,20 +96,26 @@ def get_highlights_for_document(document_id: str) -> list[dict[str, Any]]:
             timeout=20,
             check=False,
         )
-        logger.debug(f"returncode={result.returncode} stdout={result.stdout[:200]!r} stderr={result.stderr[:200]!r}")
+        logger.debug(
+            f"returncode={result.returncode} stdout={result.stdout[:200]!r} stderr={result.stderr[:200]!r}"
+        )
         if result.returncode != 0:
             logger.error(f"readwise CLI error: {result.stderr[:200]}")
             return []
 
         data = json.loads(result.stdout)
-        logger.debug(f"Parsed {len(data) if isinstance(data, list) else 'non-list'} highlights")
+        logger.debug(
+            f"Parsed {len(data) if isinstance(data, list) else 'non-list'} highlights"
+        )
         return data if isinstance(data, list) else []
 
     except subprocess.TimeoutExpired:
         logger.error("Timeout fetching highlights from readwise CLI")
         return []
     except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error from readwise CLI: {e} — stdout was: {result.stdout[:200]!r}")
+        logger.error(
+            f"JSON decode error from readwise CLI: {e} — stdout was: {result.stdout[:200]!r}"
+        )
         return []
     except Exception as e:
         logger.error(f"Error fetching highlights: {e}")
@@ -208,7 +221,9 @@ def delete_reader_highlight(highlight_id: str) -> tuple[bool, str]:
         )
         if response.status_code in (200, 204):
             return True, "Highlight deleted"
-        logger.error(f"Reader highlight delete API error {response.status_code}: {response.text[:200]}")
+        logger.error(
+            f"Reader highlight delete API error {response.status_code}: {response.text[:200]}"
+        )
         return False, f"API error {response.status_code}"
     except requests.RequestException as e:
         logger.error(f"Error deleting Reader highlight: {e}")
