@@ -37,6 +37,10 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 
 ## Article Reader Screen
 - **J / K**: Navigate to next/previous article (uppercase!)
+- **j / k**: Scroll article content down / up
+- **g / G**: Jump to top / bottom of article
+- **Ctrl+K / Ctrl+J**: Move highlight cursor to previous / next paragraph
+- **h**: Highlight paragraph at cursor (remove via Readwise web UI)
 - **a**: Move article to Archive
 - **l**: Move article to Later
 - **i**: Move article to Inbox
@@ -44,9 +48,15 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **o**: Open article in browser
 - **Ctrl+L**: Show links in article
 - **Escape / Backspace**: Back to article list
-- **h / ?**: Show/hide this help
+- **?**: Show/hide this help
 - **d**: Toggle dark mode
 - **q**: Quit
+
+## Highlighting (requires readwise CLI in PATH)
+The current paragraph is shown with a `>` marker on the left.  Use **Ctrl+K / Ctrl+J** to
+move the cursor between paragraphs, then press **h** to create a Readwise highlight.
+Existing highlights appear in a **Highlights** section at the bottom of the article
+and are marked inline with ⟦…⟧.  To remove a highlight, use the Readwise web UI.
 
 ## Library Categories
 - **📥 Inbox**: Default location for new articles

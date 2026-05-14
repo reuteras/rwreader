@@ -28,7 +28,6 @@ class RWReader(App[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         # App controls (screens have their own specific bindings)
         ("?", "toggle_help", "Help"),
-        ("h", "toggle_help", "Help"),
         ("d", "toggle_dark", "Toggle dark mode"),
         ("q", "quit", "Quit"),
     ]

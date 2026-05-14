@@ -31,6 +31,8 @@ class LinkableMarkdownViewer(MarkdownViewer):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("j", "scroll_down", "Scroll down"),
         ("k", "scroll_up", "Scroll up"),
+        ("g", "scroll_home", "Top"),
+        ("G", "scroll_end", "Bottom"),
     ]
 
     def __init__(self, **kwargs) -> None:
