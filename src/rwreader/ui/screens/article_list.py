@@ -34,6 +34,7 @@ class ArticleListScreen(Screen):
         Binding("i", "inbox_article", "Inbox"),
         Binding("D", "delete_article", "Delete"),
         Binding("o", "open_browser", "Open in browser"),
+        Binding("O", "open_source_browser", "Open source URL"),
         Binding("comma", "refresh", "Refresh"),
         Binding("escape", "back", "Back"),
         Binding("backspace", "back", "Back", show=False),
@@ -424,6 +425,30 @@ class ArticleListScreen(Screen):
                 self.notify(f"Error: {e}", severity="error")
         else:
             self.notify("No URL available", severity="warning")
+
+    async def action_open_source_browser(self) -> None:
+        """Open the original source URL of the highlighted article in browser."""
+        list_view = self.query_one(ListView)
+        if not list_view.highlighted_child or list_view.index is None:
+            self.notify("No article selected", severity="warning")
+            return
+
+        index = list_view.index
+        if not (0 <= index < len(self.articles)):
+            return
+
+        article = self.articles[index]
+        url = article.get("source_url")
+
+        if url:
+            try:
+                webbrowser.open(url)
+                self.notify("Opening source URL in browser", title="Browser")
+            except Exception as e:
+                logger.error(f"Error opening browser: {e}")
+                self.notify(f"Error: {e}", severity="error")
+        else:
+            self.notify("No source URL available", severity="warning")
 
     def action_refresh(self) -> None:
         """Refresh articles."""

@@ -39,6 +39,7 @@ class ArticleReaderScreen(Screen):
         Binding("i", "inbox", "Inbox"),
         Binding("D", "delete", "Delete"),
         Binding("o", "open_browser", "Open in Browser"),
+        Binding("O", "open_source_browser", "Open Source URL"),
         Binding("ctrl+l", "show_links", "Links"),
         Binding("h", "toggle_highlight", "Highlight"),
         Binding("ctrl+j", "cursor_next", "Para ▶", show=False),
@@ -519,6 +520,19 @@ class ArticleReaderScreen(Screen):
                 self.notify(f"Error: {e}", severity="error")
         else:
             self.notify("No URL available", severity="warning")
+
+    def action_open_source_browser(self) -> None:
+        """Open the original source URL of the article in browser."""
+        url = self.article.get("source_url")
+        if url:
+            try:
+                webbrowser.open(url)
+                self.notify("Opening source URL in browser", title="Browser")
+            except Exception as e:
+                logger.error(f"Error opening browser: {e}")
+                self.notify(f"Error: {e}", severity="error")
+        else:
+            self.notify("No source URL available", severity="warning")
 
     async def action_show_links(self) -> None:
         """Show links in the article."""

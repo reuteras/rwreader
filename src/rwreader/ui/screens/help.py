@@ -27,7 +27,8 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **l**: Move article to Later
 - **i**: Move article to Inbox
 - **D**: Delete article (with confirmation)
-- **o**: Open article in browser
+- **o**: Open article in Readwise Reader browser
+- **O**: Open original source URL in browser
 - **,**: Refresh article list
 - **space**: Load more articles
 - **Escape / Backspace**: Back to category list
@@ -45,7 +46,8 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **l**: Move article to Later
 - **i**: Move article to Inbox
 - **D**: Delete article (with confirmation)
-- **o**: Open article in browser
+- **o**: Open article in Readwise Reader browser
+- **O**: Open original source URL in browser
 - **Ctrl+L**: Show links in article
 - **Escape / Backspace**: Back to article list
 - **?**: Show/hide this help
