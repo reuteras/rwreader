@@ -72,13 +72,10 @@ class ArticleListScreen(Screen):
         """Refresh articles when screen resumes (e.g., after returning from reader)."""
         logger.debug(f"ArticleListScreen resumed, refreshing {self.category} articles")
         logger.debug(f"Current articles count: {len(self.articles)}")
-        # Clear cache and load immediately for fast display
+        # Clear cache and trigger a background refresh to sync with server
         if hasattr(self.app, "client"):
             self.app.client.clear_cache()  # type: ignore
-        # Reload articles from API immediately
-        self.load_articles(load_more=False, from_refresh=True, use_retry=False)
-        # Schedule background verification to catch stale data
-        self.set_timer(0.75, self._verify_articles)
+        self.load_articles(load_more=False, from_refresh=False, use_retry=False)
 
     def on_show(self) -> None:
         """Called when screen becomes visible."""
@@ -274,6 +271,12 @@ class ArticleListScreen(Screen):
         list_view = self.query_one(ListView)
         list_view.action_cursor_up()
 
+    def _on_reader_dismissed(self, result: dict | None) -> None:
+        """Handle result from ArticleReaderScreen dismiss, updating article list immediately."""
+        if result and "articles" in result:
+            self.articles = result["articles"]
+            self.populate_list()
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle ListView item selection (Enter key)."""
         # Get the index of the selected item
@@ -293,7 +296,8 @@ class ArticleListScreen(Screen):
                         article_list=list(self.articles),
                         current_index=self.current_index,
                         category=self.category,
-                    )
+                    ),
+                    self._on_reader_dismissed,
                 )
 
     async def action_select_article(self) -> None:
@@ -315,7 +319,8 @@ class ArticleListScreen(Screen):
                         article_list=list(self.articles),
                         current_index=self.current_index,
                         category=self.category,
-                    )
+                    ),
+                    self._on_reader_dismissed,
                 )
 
     async def action_archive_article(self) -> None:

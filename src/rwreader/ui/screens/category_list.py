@@ -53,12 +53,10 @@ class CategoryListScreen(Screen):
     async def on_resume(self) -> None:
         """Refresh category counts when screen resumes."""
         logger.debug("CategoryListScreen resumed, refreshing counts")
-        # Clear cache and load immediately for fast display
+        # Clear cache and trigger a background refresh to sync with server
         if hasattr(self.app, "client"):
             self.app.client.clear_cache()  # type: ignore
         self.load_categories(refresh=True, use_retry=False)
-        # Schedule background verification to catch stale data
-        self.set_timer(0.75, self._verify_counts)
 
     def _update_refresh_animation(self) -> None:
         """Update the title with refresh animation."""

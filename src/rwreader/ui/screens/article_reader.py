@@ -463,7 +463,7 @@ class ArticleReaderScreen(Screen):
                     self.refresh_article()
                 else:
                     self.notify("No more articles", title="Info")
-                    self.app.pop_screen()
+                    self.dismiss({"articles": list(self.article_list)})
             else:
                 logger.debug(
                     f"Article moved to {destination} which is same as current category {self.category}, not removing from list"
@@ -503,7 +503,7 @@ class ArticleReaderScreen(Screen):
                         self.refresh_article()
                     else:
                         self.notify("No more articles", title="Info")
-                        self.app.pop_screen()
+                        self.dismiss({"articles": list(self.article_list)})
             except Exception as e:
                 logger.error(f"Error deleting article: {e}")
                 self.notify(f"Error: {e}", severity="error")
@@ -563,8 +563,8 @@ class ArticleReaderScreen(Screen):
             self.notify("Configuration not available", severity="error")
 
     def action_back(self) -> None:
-        """Return to article list."""
-        self.app.pop_screen()
+        """Return to article list, passing back the (possibly modified) article list."""
+        self.dismiss({"articles": list(self.article_list)})
 
     def action_help(self) -> None:
         """Show help screen."""
