@@ -243,6 +243,15 @@ class CategoryListScreen(Screen):
         list_view = self.query_one(ListView)
         list_view.action_cursor_up()
 
+    def _on_article_list_dismissed(self, result: dict | None) -> None:
+        """Handle result from ArticleListScreen dismiss, updating category count immediately."""
+        if result and "category" in result and "count" in result:
+            category = result["category"]
+            count = result["count"]
+            if category in self.categories:
+                self.categories[category] = count
+                self.populate_list()
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle ListView item selection (Enter key)."""
         # Get the selected item's data
@@ -252,7 +261,10 @@ class CategoryListScreen(Screen):
                 # Import and push ArticleListScreen
                 from .article_list import ArticleListScreen  # noqa: PLC0415
 
-                self.app.push_screen(ArticleListScreen(category=category))
+                self.app.push_screen(
+                    ArticleListScreen(category=category),
+                    self._on_article_list_dismissed,
+                )
 
     async def action_select_category(self) -> None:
         """Select category and push article list screen (fallback)."""
@@ -268,7 +280,10 @@ class CategoryListScreen(Screen):
                     # Import and push ArticleListScreen
                     from .article_list import ArticleListScreen  # noqa: PLC0415
 
-                    self.app.push_screen(ArticleListScreen(category=category))
+                    self.app.push_screen(
+                        ArticleListScreen(category=category),
+                        self._on_article_list_dismissed,
+                    )
 
     def action_refresh(self) -> None:
         """Refresh category counts."""

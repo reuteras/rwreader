@@ -466,8 +466,8 @@ class ArticleListScreen(Screen):
         self.load_articles(load_more=True)
 
     def action_back(self) -> None:
-        """Go back to category list."""
-        self.app.pop_screen()
+        """Go back to category list, passing back the current article count."""
+        self.dismiss({"category": self.category, "count": len(self.articles)})
 
     def action_help(self) -> None:
         """Show help screen."""
