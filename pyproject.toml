@@ -53,11 +53,11 @@ include-package-data = true
 
 [dependency-groups]
 dev = [
-    "ruff>=0.15.14",
+    "ruff>=0.15.15",
     "textual-dev>=1.7.0",
     "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest-asyncio>=1.4.0",
     "mypy>=1.20.0",
     "types-requests>=2.33.0.20260408",
     "tomli-w>=1.0.0",
