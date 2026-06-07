@@ -99,7 +99,22 @@ class Configuration:
         arg_parser = argparse.ArgumentParser(
             description="A Textual app to read and manage your Readwise Reader library."
         )
-        config_file_location: Path = Path.home() / ".rwreader.toml"
+        config_file_location: Path = (
+            Path.home() / ".config" / "rwreader" / "config.toml"
+        )
+        old_config_file_location: Path = Path.home() / ".rwreader.toml"
+        if (
+            not config_file_location.exists()
+            and old_config_file_location.exists()
+        ):
+            print(
+                f"Found an old configuration file at {old_config_file_location}.\n"
+                f"rwreader now reads its configuration from {config_file_location}.\n"
+                "Please move it there before running rwreader again:\n\n"
+                f"  mkdir -p {config_file_location.parent}\n"
+                f"  mv {old_config_file_location} {config_file_location}\n"
+            )
+            sys.exit(0)
         arg_parser.add_argument(
             "--config",
             dest="config",
@@ -135,7 +150,7 @@ class Configuration:
         )
         args: argparse.Namespace = arg_parser.parse_args(args=arguments)
 
-        log_dir: Path = Path.home() / ".rwreader" / "logs"
+        log_dir: Path = Path.home() / ".cache" / "rwreader" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Configure the log file path
@@ -240,6 +255,7 @@ class Configuration:
                 print(
                     f"Config file {config_file} not found. Creating with default settings."
                 )
+                config_path.parent.mkdir(parents=True, exist_ok=True)
                 config_path.write_text(data=DEFAULT_CONFIG)
                 print(
                     f"Created {config_file} with default settings. Please edit it with your settings."

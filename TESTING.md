@@ -11,7 +11,7 @@ To get detailed logs for debugging:
 rwreader --debug
 
 # View logs in real-time
-tail -f ~/.rwreader/logs/rwreader.log
+tail -f ~/.cache/rwreader/logs/rwreader.log
 
 # Or run with info level
 rwreader --info
@@ -269,7 +269,7 @@ When reporting issues, please include:
 1. **Steps to Reproduce**: Exact sequence of actions
 2. **Expected Behavior**: What should happen
 3. **Actual Behavior**: What actually happened
-4. **Logs**: Relevant entries from `~/.rwreader/logs/rwreader.log`
+4. **Logs**: Relevant entries from `~/.cache/rwreader/logs/rwreader.log`
 5. **Environment**: OS, Python version, rwreader version
 6. **Screenshots**: If applicable
 

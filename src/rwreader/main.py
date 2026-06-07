@@ -10,7 +10,7 @@ from .ui.app import RWReader
 def main() -> None:
     """Main entry point for rwreader."""
     # Create logs directory if it doesn't exist
-    log_dir: Path = Path.home() / ".rwreader" / "logs"
+    log_dir: Path = Path.home() / ".cache" / "rwreader" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Configure the log file path

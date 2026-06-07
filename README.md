@@ -40,7 +40,7 @@ pip install -e .
 
 ### 1. Create configuration file
 
-Create `~/.rwreader.toml`:
+Create `~/.config/rwreader/config.toml`:
 
 ```toml
 [readwise]
@@ -234,11 +234,11 @@ The application follows a three-pane layout:
 
 - Check your internet connection
 - Try `G` to manually refresh
-- Check logs: `rwreader --debug 2>&1 | tail -f ~/.rwreader/logs/rwreader.log`
+- Check logs: `rwreader --debug 2>&1 | tail -f ~/.cache/rwreader/logs/rwreader.log`
 
 ### Configuration file not found
 
-- Create `~/.rwreader.toml` with required fields
+- Create `~/.config/rwreader/config.toml` with required fields
 - Use `rwreader --create-config PATH` to generate a template
 
 ### Python 3.14 compatibility

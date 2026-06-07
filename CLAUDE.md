@@ -42,10 +42,10 @@ src/rwreader/
 
 ## Configuration
 
-- **Config file**: `~/.rwreader.toml`
+- **Config file**: `~/.config/rwreader/config.toml`
 - **Main sections**: `[general]`, `[readwise]`, `[display]`
 - **1Password integration**: Token can use `op read` commands
-- **Logging**: Located in `~/.rwreader/logs/rwreader.log`
+- **Logging**: Located in `~/.cache/rwreader/logs/rwreader.log`
 
 ## Entry Points & Commands
 
