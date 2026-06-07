@@ -103,10 +103,7 @@ class Configuration:
             Path.home() / ".config" / "rwreader" / "config.toml"
         )
         old_config_file_location: Path = Path.home() / ".rwreader.toml"
-        if (
-            not config_file_location.exists()
-            and old_config_file_location.exists()
-        ):
+        if not config_file_location.exists() and old_config_file_location.exists():
             print(
                 f"Found an old configuration file at {old_config_file_location}.\n"
                 f"rwreader now reads its configuration from {config_file_location}.\n"
