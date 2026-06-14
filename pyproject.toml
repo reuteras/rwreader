@@ -53,7 +53,7 @@ include-package-data = true
 
 [dependency-groups]
 dev = [
-    "ruff>=0.15.15",
+    "ruff>=0.15.16",
     "textual-dev>=1.7.0",
     "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
