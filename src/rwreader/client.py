@@ -967,7 +967,7 @@ class ReadwiseClient:
             logger.error(f"Error getting later count: {e}")
             return 0
 
-    def save_document(  # noqa: PLR0913, PLR0912
+    def save_document(  # noqa: PLR0912, PLR0913, PLR0917
         self,
         url: str,
         html: str | None = None,
