@@ -99,6 +99,7 @@ import pytest
 from unittest.mock import Mock, patch
 from rwreader.client import ReadwiseClient
 
+
 @pytest.mark.unit
 def test_get_inbox_from_cache(mock_api):
     """Test getting inbox articles from cache."""
@@ -124,6 +125,7 @@ def test_get_inbox_from_cache(mock_api):
 import pytest
 from textual.pilot import Pilot
 
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_app_startup(app_with_mock_client):
@@ -140,10 +142,10 @@ Common fixtures from `conftest.py`:
 
 ```python
 def test_with_fixtures(
-    temp_config_dir,           # Temporary config directory
-    sample_article_dict,        # Sample article data
-    mock_readwise_document,     # Mock API document
-    clean_environment          # Clean env vars
+    temp_config_dir,  # Temporary config directory
+    sample_article_dict,  # Sample article data
+    mock_readwise_document,  # Mock API document
+    clean_environment,  # Clean env vars
 ):
     # Your test code
     pass

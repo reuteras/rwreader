@@ -38,15 +38,15 @@ class TestReadwiseClient(unittest.TestCase):
             {"id": 1, "title": "Article 1"},
             {"id": 2, "title": "Article 2"},
         ]
-        
+
         response = mock.Mock()
         response.status_code = 200
         response.json.return_value = {"results": expected_articles}
-        
+
         self.mock_session.get = mock.Mock(return_value=response)
-        
+
         articles = self.client.get_articles()
-        
+
         self.assertEqual(len(articles), 2)
         self.assertEqual(articles[0]["title"], "Article 1")
         self.mock_session.get.assert_called_once()
@@ -56,19 +56,20 @@ class TestReadwiseClient(unittest.TestCase):
         response = mock.Mock()
         response.status_code = 401
         response.json.return_value = {"error": "Unauthorized"}
-        
+
         self.mock_session.get = mock.Mock(return_value=response)
-        
+
         with self.assertRaises(ReadwiseAuthError):
             self.client.get_articles()
 
     def test_get_articles_timeout(self):
         """Test timeout handling."""
         import requests
+
         self.mock_session.get = mock.Mock(
             side_effect=requests.Timeout("Connection timeout")
         )
-        
+
         with self.assertRaises(requests.Timeout):
             self.client.get_articles()
 
@@ -76,11 +77,11 @@ class TestReadwiseClient(unittest.TestCase):
         """Test moving article to different location."""
         response = mock.Mock()
         response.status_code = 204
-        
+
         self.mock_session.patch = mock.Mock(return_value=response)
-        
+
         result = self.client.move_article(1, "archive")
-        
+
         self.assertTrue(result)
         self.mock_session.patch.assert_called_once()
 
@@ -89,12 +90,12 @@ class TestReadwiseClient(unittest.TestCase):
         response = mock.Mock()
         response.status_code = 400
         response.json.return_value = {"error_message": "Bad request"}
-        
+
         self.mock_session.get = mock.Mock(return_value=response)
-        
+
         with self.assertRaises(ReadwiseError) as context:
             self.client.get_articles()
-        
+
         self.assertIn("Bad request", str(context.exception))
 
 
@@ -144,10 +145,10 @@ class TestCache(unittest.TestCase):
     def test_cache_expiry(self):
         """Test cache entry expires after TTL."""
         self.cache.set("key1", "value1")
-        
+
         # Wait for TTL to expire
         time.sleep(2.1)
-        
+
         result = self.cache.get("key1")
         self.assertIsNone(result)
 
@@ -155,9 +156,9 @@ class TestCache(unittest.TestCase):
         """Test clearing cache."""
         self.cache.set("key1", "value1")
         self.cache.set("key2", "value2")
-        
+
         self.cache.clear()
-        
+
         self.assertIsNone(self.cache.get("key1"))
         self.assertIsNone(self.cache.get("key2"))
 
@@ -165,7 +166,7 @@ class TestCache(unittest.TestCase):
         """Test updating cached value."""
         self.cache.set("key1", "value1")
         self.cache.set("key1", "value2")
-        
+
         result = self.cache.get("key1")
         self.assertEqual(result, "value2")
 
@@ -197,6 +198,7 @@ class TestConfiguration(unittest.TestCase):
     def tearDown(self):
         """Clean up test fixtures."""
         import shutil
+
         shutil.rmtree(self.temp_dir)
 
     def test_load_valid_config(self):
@@ -209,9 +211,9 @@ log_level = "info"
 token = "test_token_123"
 """
         self.config_file.write_text(config_content)
-        
+
         config = Config(str(self.config_file))
-        
+
         self.assertEqual(config.log_level, "info")
         self.assertEqual(config.token, "test_token_123")
 
@@ -222,7 +224,7 @@ token = "test_token_123"
 log_level = "info"
 """
         self.config_file.write_text(config_content)
-        
+
         with self.assertRaises(ValueError):
             Config(str(self.config_file))
 
@@ -236,15 +238,15 @@ log_level = "info"
 token = "config_token"
 """
         self.config_file.write_text(config_content)
-        
+
         # Set environment variable
         os.environ["READWISE_TOKEN"] = "env_token"
-        
+
         config = Config(str(self.config_file))
-        
+
         # Environment variable should override config file
         self.assertEqual(config.token, "env_token")
-        
+
         # Cleanup
         del os.environ["READWISE_TOKEN"]
 
@@ -252,16 +254,16 @@ token = "config_token"
         """Test 1Password CLI integration."""
         # This would require mocking the subprocess call
         from unittest import mock
-        
+
         config_content = """
 [readwise]
 token = "op read op://vault/item/token"
 """
         self.config_file.write_text(config_content)
-        
+
         with mock.patch("subprocess.run") as mock_run:
             mock_run.return_value.stdout = b"secret_token_from_1password"
-            
+
             config = Config(str(self.config_file))
             # Assertion depends on implementation
             self.assertIsNotNone(config.token)
@@ -336,12 +338,14 @@ dependencies = [
 # 1. Better reactive attributes
 from textual.reactive import reactive
 
+
 class ArticleList(Static):
     selected_index = reactive(0)
-    
+
     def watch_selected_index(self, old: int, new: int) -> None:
         """Called automatically when selected_index changes."""
         self.display_article(new)
+
 
 # 2. Improved CSS support
 class MyApp(App):
@@ -350,12 +354,13 @@ class MyApp(App):
         layout: grid;
         grid-size: 3 1;
     }
-    
+
     #navigation {
         width: 20%;
         border: solid blue;
     }
     """
+
 
 # 3. Better async/await patterns
 async def load_articles(self):
@@ -365,6 +370,7 @@ async def load_articles(self):
         self.refresh_display()
     except ReadwiseError as e:
         self.notify(f"Error: {e}", severity="error")
+
 
 # 4. More widgets available
 from textual.widgets import DataTable, Tree, TabbedContent
@@ -385,7 +391,7 @@ class ReadwiseError(Exception):
 
     def __init__(self, message: str, status_code: int | None = None):
         """Initialize exception.
-        
+
         Args:
             message: Error message
             status_code: HTTP status code if applicable
@@ -422,7 +428,7 @@ class ReadwiseRateLimit(ReadwiseError):
         retry_after: int | None = None,
     ):
         """Initialize rate limit exception.
-        
+
         Args:
             message: Error message
             retry_after: Seconds to wait before retry
@@ -476,10 +482,10 @@ class Client:
 
     def __init__(self, token: str):
         """Initialize client.
-        
+
         Args:
             token: Readwise API token
-            
+
         Raises:
             ValueError: If token is empty
         """
@@ -489,13 +495,13 @@ class Client:
 
     def _handle_response(self, response) -> dict:
         """Handle API response and raise appropriate exceptions.
-        
+
         Args:
             response: HTTP response object
-            
+
         Returns:
             Response JSON
-            
+
         Raises:
             ReadwiseAuthError: On 401
             ReadwiseNotFound: On 404
@@ -507,45 +513,47 @@ class Client:
         """
         if response.status_code == 200 or response.status_code == 201:
             return response.json()
-        
+
         if response.status_code == 204:
             return {}
-        
+
         error_msg = response.json().get("error_message", "Unknown error")
-        
+
         if response.status_code == 401:
             raise ReadwiseAuthError(f"Authentication failed: {error_msg}", 401)
-        
+
         if response.status_code == 403:
             raise ReadwiseForbidden(f"Access forbidden: {error_msg}", 403)
-        
+
         if response.status_code == 404:
             raise ReadwiseNotFound(f"Resource not found: {error_msg}", 404)
-        
+
         if response.status_code == 400:
             raise ReadwiseValidationError(f"Invalid request: {error_msg}", 400)
-        
+
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
             raise ReadwiseRateLimit(
                 f"Rate limited: {error_msg}",
                 retry_after=retry_after,
             )
-        
+
         if response.status_code >= 500:
-            raise ReadwiseServerError(f"Server error: {error_msg}", response.status_code)
-        
+            raise ReadwiseServerError(
+                f"Server error: {error_msg}", response.status_code
+            )
+
         raise ReadwiseError(f"API error: {error_msg}", response.status_code)
 
     def get_articles(self, limit: int = 100) -> list:
         """Get articles with error handling.
-        
+
         Args:
             limit: Maximum articles to retrieve
-            
+
         Returns:
             List of articles
-            
+
         Raises:
             ReadwiseAuthError: If not authenticated
             ReadwiseRateLimit: If rate limited
@@ -610,7 +618,7 @@ class Article:
         created_at: Optional[datetime] = None,
     ):
         """Initialize article.
-        
+
         Args:
             article_id: Unique article ID
             title: Article title
@@ -647,17 +655,17 @@ class Client:
         session: Optional[requests.Session] = None,
     ) -> None:
         """Initialize client.
-        
+
         Args:
             token: Readwise API token
             session: Optional requests session
-            
+
         Raises:
             ValueError: If token is empty
         """
         if not token:
             raise ValueError("Token cannot be empty")
-        
+
         self.token: str = token
         self.session: requests.Session = session or requests.Session()
         self.base_url: str = "https://readwise.io/api/v3"
@@ -669,15 +677,15 @@ class Client:
         tag: Optional[str] = None,
     ) -> List[Article]:
         """Get articles from Readwise.
-        
+
         Args:
             limit: Maximum articles to return (default: 100)
             offset: Offset for pagination (default: 0)
             tag: Optional tag to filter articles
-            
+
         Returns:
             List of Article objects
-            
+
         Raises:
             ReadwiseError: On API error
         """
@@ -691,14 +699,14 @@ class Client:
         location: str,
     ) -> bool:
         """Move article to different location.
-        
+
         Args:
             article_id: ID of article to move
             location: Target location (inbox, archive, later)
-            
+
         Returns:
             True if successful
-            
+
         Raises:
             ReadwiseError: On API error
             ValueError: If location is invalid
@@ -706,7 +714,7 @@ class Client:
         valid_locations: List[str] = ["inbox", "archive", "later"]
         if location not in valid_locations:
             raise ValueError(f"Invalid location: {location}")
-        
+
         # Implementation...
         return True
 ```
@@ -771,7 +779,7 @@ class RwReaderApp(App):
         new_id: int,
     ) -> None:
         """Called when selected article changes.
-        
+
         Args:
             old_id: Previous article ID
             new_id: New article ID
@@ -787,7 +795,7 @@ class RwReaderApp(App):
         new_location: str,
     ) -> None:
         """Called when location changes.
-        
+
         Args:
             old_location: Previous location
             new_location: New location
@@ -802,7 +810,7 @@ class RwReaderApp(App):
         new_state: bool,
     ) -> None:
         """Called when loading state changes.
-        
+
         Args:
             old_state: Previous loading state
             new_state: New loading state
@@ -851,11 +859,11 @@ def setup_logging(
     log_file: Optional[Path] = None,
 ) -> logging.Logger:
     """Set up logging with console and file handlers.
-    
+
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
         log_file: Optional file path for logging
-        
+
     Returns:
         Configured logger instance
     """
@@ -904,15 +912,15 @@ class Client:
 
     def get_articles(self, limit: int = 100) -> List[dict]:
         """Get articles with logging.
-        
+
         Args:
             limit: Maximum articles
-            
+
         Returns:
             List of articles
         """
         logger.debug(f"Fetching articles with limit={limit}")
-        
+
         try:
             response = self._make_request("GET", "/documents")
             articles = response.json()["results"]
@@ -943,4 +951,3 @@ These implementations provide:
 6. **Logging** - Comprehensive logging
 
 Start with these in priority order and integrate incrementally.
-

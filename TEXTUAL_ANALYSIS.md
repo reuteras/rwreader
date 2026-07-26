@@ -58,44 +58,46 @@ src/rwreader/
 ```python
 from textual import app, screen, widgets
 
+
 class Termflux(app.App):
     BINDINGS = [
         ("q", "quit()", "quit"),
         ("r", "read()", "mark as read"),
         ("R", "read_until_here()", "read until here"),
     ]
-    
+
     def on_mount(self) -> None:
         self.client = client()  # Initialization in on_mount
         self.table = self.query_one("#entries")
         self.entries = self.client.get_entries(...)
-        
+
         # Populate table
         self.table.add_column("R", key="read")
         for index, entry in enumerate(self.entries):
             self.table.add_row(...)
-    
+
     def compose(self) -> None:
         yield widgets.DataTable(id="entries")
         yield widgets.Footer()
-    
+
     def action_select(self) -> None:
         self.selected_entry = self.entries[self.table.cursor_coordinate.row]
-    
+
     def action_open(self) -> None:
         self.push_screen(EntryScreen())  # Modal screen navigation
-    
+
     def on_data_table_row_selected(self) -> None:
         """Event handler for row selection"""
         self.action_select()
         self.action_open()
+
 
 class EntryScreen(screen.ModalScreen):
     BINDINGS = [
         ("q", "app.pop_screen()", "back"),
         ("right", "next()", "next"),
     ]
-    
+
     def compose(self) -> None:
         entry = self.app.selected_entry
         content = "# " + entry["title"]
@@ -116,7 +118,7 @@ class EntryScreen(screen.ModalScreen):
 # From app.py
 class RwReaderApp(App):
     BINDINGS = [...]
-    
+
     def compose(self):
         yield Header()
         yield Container(
@@ -125,7 +127,7 @@ class RwReaderApp(App):
             ArticleViewer(id="article-viewer"),
         )
         yield Footer()
-    
+
     # Uses custom widgets from ui/widgets/
     # Has comprehensive error handling
     # Implements progressive loading
@@ -143,12 +145,12 @@ class RwReaderApp(App):
 class Client:
     def __init__(self, url, username=None, password=None, api_key=None, session=None):
         self.session = session or requests.Session()
-    
+
     def get_entries(self, status="unread", limit=100, offset=0):
         """Fetch entries from Miniflux API"""
         # Comprehensive error handling
         # Proper HTTP methods (GET, POST, PUT, DELETE)
-    
+
     def update_entries(self, entry_ids, status):
         """Update multiple entries"""
 ```
@@ -177,17 +179,17 @@ Example test pattern:
 def test_get_entries(self):
     session = requests.Session()
     expected_result = []
-    
+
     response = mock.Mock()
     response.status_code = 200
     response.json.return_value = expected_result
-    
+
     session.get = mock.Mock()
     session.get.return_value = response
-    
+
     client = miniflux.Client("http://localhost", "user", "pass", session=session)
     result = client.get_entries(status="unread", limit=10)
-    
+
     session.get.assert_called_once_with(
         "http://localhost/v1/entries",
         params=mock.ANY,
@@ -217,11 +219,13 @@ def test_get_articles(self):
     """Test article retrieval with mocking"""
     client = Client("token", session=mock_session)
     # Test API integration
-    
+
+
 # tests/test_cache.py
 def test_cache_expiry(self):
     """Test cache TTL and refresh"""
-    
+
+
 # tests/test_config.py
 def test_1password_integration(self):
     """Test 1Password CLI support"""
@@ -250,7 +254,7 @@ main() → login_flow() → ui() → Termflux(App)
                                    ├── on_mount() [fetch data]
                                    ├── compose() [UI]
                                    └── actions [mark as read]
-                                   
+
                                 EntryScreen(ModalScreen)
                                    └── view entry content
 ```
@@ -310,9 +314,10 @@ main.py [entry point]
 # Modern approach
 from textual.reactive import reactive
 
+
 class ArticleList(Static):
     selected_index = reactive(0)
-    
+
     def watch_selected_index(self, old_value: int, new_value: int) -> None:
         """Called when selected_index changes"""
         self.refresh()
@@ -325,12 +330,15 @@ class ArticleList(Static):
 # Define messages
 class ArticleSelected(Message):
     """Posted when article is selected"""
+
     def __init__(self, article_id: int) -> None:
         super().__init__()
         self.article_id = article_id
 
+
 # Post messages
 self.post_message(ArticleSelected(article_id=123))
+
 
 # Handle messages
 def on_article_selected(self, message: ArticleSelected) -> None:
@@ -366,7 +374,7 @@ headers = self.query(Header)
 
 ```python
 BINDINGS = [
-    ("q", "quit()", "Quit"),      # Shows in footer
+    ("q", "quit()", "Quit"),  # Shows in footer
     ("r", "read()", "Mark read"),  # Informative
     ("R", "read_until_here()", "Mark until here"),
 ]
@@ -383,10 +391,11 @@ def on_mount(self) -> None:
         self.client = create_client()
     except Exception as e:
         self.notify(f"Error: {e}", severity="error")
-        
+
+
 def on_unmount(self) -> None:
     """Clean up resources"""
-    if hasattr(self, 'client'):
+    if hasattr(self, "client"):
         self.client.close()
 ```
 
@@ -398,7 +407,8 @@ def on_unmount(self) -> None:
 class LoadingIndicator(Static):
     def on_mount(self) -> None:
         self.styles.display = "block"
-    
+
+
 async def load_data(self):
     """Async data loading"""
     # Load data without blocking UI
@@ -485,15 +495,17 @@ dependencies = [
 def config_file() -> pathlib.Path:
     return pathlib.Path(appdirs.user_config_dir(APPNAME)) / "config.json"
 
+
 def read_config() -> dict:
     return json.loads(config_file().read_text()) if config_file().exists() else {}
+
 
 # On first run: simple input() prompts
 instance = input("instance url ")
 api_key = input("api key ")
 ```
 
-**Pros:** Simple, stateless  
+**Pros:** Simple, stateless
 **Cons:** No encryption, no advanced options
 
 ### rwreader: TOML + 1Password
@@ -517,7 +529,7 @@ token = "op read op://vault/item/token"  # 1Password integration!
 - Logging configuration
 ```
 
-**Pros:** Secure, flexible, standard format  
+**Pros:** Secure, flexible, standard format
 **Cons:** More complex setup
 
 **Recommendation:** rwreader's approach is superior for production use.
@@ -531,6 +543,7 @@ token = "op read op://vault/item/token"  # 1Password integration!
 def is_configured() -> None:
     config = read_config()
     return "instance" in config and "api_key" in config
+
 
 # No error handling for API failures shown
 ```
@@ -550,19 +563,20 @@ def is_configured() -> None:
 class ClientError(Exception):
     def __init__(self, response):
         self.status_code = response.status_code
-    
+
     def get_error_reason(self):
         try:
             return response.json()["error_message"]
         except:
             return f"status_code={self.status_code}"
 
+
 # Specific exceptions:
-- ResourceNotFound (404)
-- AccessUnauthorized (401)
-- AccessForbidden (403)
-- BadRequest (400)
-- ServerError (500)
+-ResourceNotFound(404)
+-AccessUnauthorized(401)
+-AccessForbidden(403)
+-BadRequest(400)
+-ServerError(500)
 ```
 
 **Recommendation for rwreader:**
@@ -603,6 +617,7 @@ import unittest
 from unittest import mock
 from rwreader.client import Client
 
+
 class TestReadwiseClient(unittest.TestCase):
     def test_get_articles_success(self):
         """Test successful article retrieval"""
@@ -610,24 +625,26 @@ class TestReadwiseClient(unittest.TestCase):
         client = Client("token", session=mock_session)
         articles = client.get_articles()
         # Assert expectations
-    
+
     def test_api_error_handling(self):
         """Test graceful error handling"""
         # Test timeout, auth failure, etc.
+
 
 # tests/test_cache.py
 class TestCache(unittest.TestCase):
     def test_cache_expiry(self):
         """Test TTL functionality"""
-    
+
     def test_cache_miss_reload(self):
         """Test reload on cache miss"""
+
 
 # tests/test_config.py
 class TestConfiguration(unittest.TestCase):
     def test_toml_parsing(self):
         """Test config file parsing"""
-    
+
     def test_1password_integration(self):
         """Test 1Password CLI integration"""
 ```
@@ -680,9 +697,10 @@ mypy src/rwreader/
 # In ui/app.py
 from textual.reactive import reactive
 
+
 class RwReaderApp(App):
     selected_article_id = reactive(0)
-    
+
     def watch_selected_article_id(self, old_id: int, new_id: int) -> None:
         """Called when article selection changes"""
         article = self.get_article(new_id)
@@ -694,13 +712,16 @@ class RwReaderApp(App):
 # In client.py
 class ReadwiseError(Exception):
     """Base exception for Readwise API errors"""
-    
+
+
 class ReadwiseAuthError(ReadwiseError):
     """Authentication failure"""
-    
+
+
 class ReadwiseNotFound(ReadwiseError):
     """Resource not found"""
-    
+
+
 class ReadwiseRateLimit(ReadwiseError):
     """Rate limit exceeded"""
 ```
@@ -712,6 +733,7 @@ def on_mount(self) -> None:
     """Mount without blocking UI"""
     # Quick initialization
     self.call_later(self.load_data)
+
 
 async def load_data(self) -> None:
     """Load data asynchronously"""
@@ -728,13 +750,14 @@ async def load_data(self) -> None:
 # Recommended: Use structlog for better formatting
 
 import logging
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler('~/.rwreader/logs/rwreader.log'),
+        logging.FileHandler("~/.rwreader/logs/rwreader.log"),
         logging.StreamHandler(),
-    ]
+    ],
 )
 
 # Usage in code:
@@ -747,18 +770,26 @@ logger.debug(f"Loaded {len(articles)} articles")
 # Current: BINDINGS in app.py
 # Recommendation: Add help screen linking to bindings
 
+
 class HelpScreen(Screen):
     """Display keyboard shortcuts and help"""
+
     def compose(self):
         shortcuts = [
-            ("Navigation", [
-                ("j/k or ↑↓", "Move between articles"),
-                ("tab", "Switch panes"),
-            ]),
-            ("Actions", [
-                ("o", "Open in browser"),
-                ("a/l/i", "Move to Archive/Later/Inbox"),
-            ]),
+            (
+                "Navigation",
+                [
+                    ("j/k or ↑↓", "Move between articles"),
+                    ("tab", "Switch panes"),
+                ],
+            ),
+            (
+                "Actions",
+                [
+                    ("o", "Open in browser"),
+                    ("a/l/i", "Move to Archive/Later/Inbox"),
+                ],
+            ),
         ]
         yield Static(self.format_shortcuts(shortcuts))
 ```
@@ -768,14 +799,17 @@ class HelpScreen(Screen):
 # Current: Progressive loading mentioned
 # Ensure proper implementation:
 
+
 class LoadMoreWidget(Static):
     """Widget for loading additional items"""
+
     def on_mount(self) -> None:
         self.styles.dock = "bottom"
         self.styles.height = 1
-    
+
     def render(self) -> str:
         return "[Press 'm' to load more...]"
+
 
 def action_load_more(self) -> None:
     """Load next batch of articles"""
@@ -874,4 +908,3 @@ textual run --dev src/rwreader/main.py
 5. **Documentation** - Development guide for contributors
 
 The application is well-structured and follows good practices. The recommendations are about modernization and best practices from the broader Python/TUI ecosystem, not fundamental architectural changes.
-
