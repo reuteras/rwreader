@@ -178,7 +178,7 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
                 if isinstance(value, str) and len(value) > 100:  # noqa: PLR2004
                     if field not in ["id", "title", "url", "author", "site_name"]:
                         if len(value) > largest_size:
-                            largest_size: int = len(value)
+                            largest_size = len(value)
                             largest_field = field
 
             if largest_field:

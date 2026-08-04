@@ -75,8 +75,8 @@ class LinkableMarkdownViewer(MarkdownViewer):
         # Match HTML links of the form <a href="url">text</a>
         html_link_pattern = r'<a\s+href="([^"]+)"[^>]*>([^<]+)</a>'
         for match in re.finditer(pattern=html_link_pattern, string=markdown_text):
-            link_url: str = match.group(1).strip()
-            link_text: str = match.group(2).strip()
+            link_url = match.group(1).strip()
+            link_text = match.group(2).strip()
             links.append((link_text, link_url))
 
         return links

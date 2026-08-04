@@ -119,7 +119,7 @@ class LinkSelectionScreen(ModalScreen):
                 path: str = parsed.path
 
                 if len(domain) + 10 >= max_line_length:  # If domain itself is very long
-                    url: str = domain[: max_line_length - 3] + "..."
+                    url = domain[: max_line_length - 3] + "..."
                 else:
                     # Keep domain and truncate path
                     path_max: int = max_line_length - len(domain) - 10

@@ -98,7 +98,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
                 if classes:
                     for cls in classes:
                         if cls.startswith("language-"):
-                            language: str = cls.replace("language-", "")
+                            language = cls.replace("language-", "")
                             break
 
                 if language:
@@ -128,7 +128,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
 
             # If markdown_text is still empty or too short, try direct raw content
             if len(markdown_text.strip()) < 20:  # noqa: PLR2004
-                markdown_text: str = html_content
+                markdown_text = html_content
 
         # Clean up the markdown
         markdown_text = _clean_markdown(markdown_text=markdown_text)
@@ -366,7 +366,7 @@ def format_timestamp(timestamp: str | int | float | None) -> str:
             if (
                 timestamp_val > 10000000000  # noqa: PLR2004
             ):  # Timestamps in milliseconds are typically > 10^12
-                timestamp_val: float = timestamp_val / 1000
+                timestamp_val = timestamp_val / 1000
 
             # Convert from seconds to datetime
             dt: datetime = datetime.fromtimestamp(timestamp=timestamp_val)

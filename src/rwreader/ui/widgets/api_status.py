@@ -58,7 +58,7 @@ class APIStatusWidget(Static):
             retry_after: Seconds until retry is allowed
             message: Optional custom message
         """
-        self.retry_time: float = time.time() + retry_after
+        self.retry_time = time.time() + retry_after
         if message is None:
             message = f"API rate limit reached. Please wait {retry_after} seconds before continuing."
         self.update(content=message)
