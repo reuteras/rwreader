@@ -125,7 +125,9 @@ class TestGetHighlightsForDocument:
     )
     def test_parses_list_response(self, _cli: MagicMock, mock_run: MagicMock) -> None:
         """Parses a JSON list returned by the CLI."""
-        payload = [{"id": "abc", "content": "Some text", "tags": [], "notes": None}]
+        payload: list[dict[str, object]] = [
+            {"id": "abc", "content": "Some text", "tags": [], "notes": None}
+        ]
         mock_run.return_value = MagicMock(
             returncode=0, stdout=json.dumps(payload), stderr=""
         )

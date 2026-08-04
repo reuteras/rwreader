@@ -2,6 +2,7 @@
 
 import datetime
 import time
+from collections.abc import Generator
 from unittest.mock import Mock, patch
 
 import pytest
@@ -47,7 +48,7 @@ def mock_document() -> Mock:
 
 
 @pytest.fixture
-def mock_readwise_api() -> Mock:
+def mock_readwise_api() -> Generator[Mock, None, None]:
     """Create a mock ReadwiseReader API."""
     with patch("rwreader.client.ReadwiseReader") as mock_api:
         yield mock_api
