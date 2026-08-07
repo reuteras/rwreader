@@ -92,6 +92,7 @@ token = "op read op://Personal/Readwise/credential"
 ```
 
 Ensure 1Password CLI is installed and authenticated:
+
 ```bash
 op signin my.1password.com user@example.com
 ```
@@ -99,6 +100,7 @@ op signin my.1password.com user@example.com
 ### Environment Variables
 
 You can also set the token via environment variable:
+
 ```bash
 export READWISE_TOKEN="your_token_here"
 rwreader
@@ -108,55 +110,55 @@ rwreader
 
 ### Navigation
 
-| Key | Action |
-| --- | ------ |
-| `j` / `↓` | Move down in current pane |
-| `k` / `↑` | Move up in current pane |
-| `J` | Next category |
-| `K` | Previous category |
-| `Tab` | Focus next pane (Navigation → Articles → Content) |
-| `Shift+Tab` | Focus previous pane |
+| Key         | Action                                            |
+|-------------|---------------------------------------------------|
+| `j` / `↓`   | Move down in current pane                         |
+| `k` / `↑`   | Move up in current pane                           |
+| `J`         | Next category                                     |
+| `K`         | Previous category                                 |
+| `Tab`       | Focus next pane (Navigation → Articles → Content) |
+| `Shift+Tab` | Focus previous pane                               |
 
 ### Jump to Category
 
-| Key | Category |
-| --- | -------- |
-| `I` | Go to Inbox |
-| `F` | Go to Feed |
-| `L` | Go to Later |
+| Key | Category      |
+|-----|---------------|
+| `I` | Go to Inbox   |
+| `F` | Go to Feed    |
+| `L` | Go to Later   |
 | `A` | Go to Archive |
 
 ### Article Actions
 
-| Key | Action |
-| --- | ------ |
-| `a` | Move to Archive |
-| `l` | Move to Later |
-| `i` | Move to Inbox |
-| `o` | Open in browser |
-| `m` | Show metadata |
+| Key | Action                |
+|-----|-----------------------|
+| `a` | Move to Archive       |
+| `l` | Move to Later         |
+| `i` | Move to Inbox         |
+| `o` | Open in browser       |
+| `m` | Show metadata         |
 | `M` | Maximize content pane |
-| `D` | Delete article |
+| `D` | Delete article        |
 
 ### Link Management
 
-| Key | Action |
-| --- | ------ |
-| `Ctrl+O` | Open article links (choose which to open) |
-| `Ctrl+S` | Save link (download) |
-| `Ctrl+L` | Add link to Readwise |
-| `Ctrl+Shift+L` | Add link to Readwise and open |
+| Key            | Action                                    |
+|----------------|-------------------------------------------|
+| `Ctrl+O`       | Open article links (choose which to open) |
+| `Ctrl+S`       | Save link (download)                      |
+| `Ctrl+L`       | Add link to Readwise                      |
+| `Ctrl+Shift+L` | Add link to Readwise and open             |
 
 ### App Controls
 
-| Key | Action |
-| --- | ------ |
-| `h` / `?` | Show/hide help |
-| `d` | Toggle dark/light mode |
-| `c` | Clear content pane |
-| `G` / `,` | Refresh all data |
-| `Space` | Load more articles |
-| `q` | Quit |
+| Key       | Action                 |
+|-----------|------------------------|
+| `h` / `?` | Show/hide help         |
+| `d`       | Toggle dark/light mode |
+| `c`       | Clear content pane     |
+| `G` / `,` | Refresh all data       |
+| `Space`   | Load more articles     |
+| `q`       | Quit                   |
 
 ## Development
 

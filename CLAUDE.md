@@ -1,6 +1,7 @@
 # CLAUDE.md - Project Information for rwreader
 
 ## Project Overview
+
 **rwreader** is a terminal-based user interface (TUI) application for accessing and managing your Readwise Reader library. Built using the Textual framework, it provides a clean, keyboard-driven interface for browsing, reading, and organizing articles from the command line.
 
 ## Architecture & Technology Stack

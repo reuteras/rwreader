@@ -22,6 +22,7 @@ rwreader --info
 ### 1. Category List Tests
 
 #### 1.1 Initial Load
+
 - **Steps**: Launch rwreader
 - **Expected**:
   - Categories display with counts: Inbox, Later, Feed, Archive
@@ -29,6 +30,7 @@ rwreader --info
   - No errors in logs
 
 #### 1.2 Category Refresh (Issue #28, #30, PR #29, #31)
+
 - **Steps**:
   1. Launch app
   2. Note current counts
@@ -43,6 +45,7 @@ rwreader --info
   - Logs show: "action_refresh called", "load_categories called with refresh=True"
 
 #### 1.3 Category Navigation
+
 - **Steps**:
   1. Use 'j'/'k' or arrow keys to move between categories
   2. Press Enter on each category
@@ -53,6 +56,7 @@ rwreader --info
 ### 2. Article List Tests
 
 #### 2.1 Initial Article Load
+
 - **Steps**:
   1. Select a category (Inbox, Feed, Later, or Archive)
   2. Wait for articles to load
@@ -64,6 +68,7 @@ rwreader --info
   - No duplicate IDs in logs
 
 #### 2.2 Article List Refresh
+
 - **Steps**:
   1. Open a category
   2. Press 'r' to refresh
@@ -75,6 +80,7 @@ rwreader --info
   - No duplicate ID errors
 
 #### 2.3 Article Navigation
+
 - **Steps**: Use 'j'/'k' to move through article list
 - **Expected**:
   - Cursor moves correctly
@@ -83,6 +89,7 @@ rwreader --info
 ### 3. Article Reader Tests
 
 #### 3.1 Open Article
+
 - **Steps**:
   1. In article list, select an article
   2. Press Enter
@@ -92,6 +99,7 @@ rwreader --info
   - Content is readable and formatted
 
 #### 3.2 Article Navigation (J/K)
+
 - **Steps**:
   1. Open an article
   2. Press 'J' for next article
@@ -104,6 +112,7 @@ rwreader --info
 ### 4. Article Actions Tests
 
 #### 4.1 Archive Article from Reader (Issue #34)
+
 - **Steps**:
   1. Open Inbox article
   2. Press 'a' to archive
@@ -118,6 +127,7 @@ rwreader --info
   - Logs show: "ArticleListScreen resumed, refreshing articles"
 
 #### 4.2 Move Article to Later from Reader
+
 - **Steps**:
   1. Open Inbox article
   2. Press 'l' to move to Later
@@ -128,6 +138,7 @@ rwreader --info
   - List updates correctly on return
 
 #### 4.3 Move Article to Inbox from Reader
+
 - **Steps**:
   1. Open Later/Archive article
   2. Press 'i' to move to Inbox
@@ -138,6 +149,7 @@ rwreader --info
   - List updates on return
 
 #### 4.4 Delete Article from Reader (Issue #32, PR #33)
+
 - **Steps**:
   1. Open an article
   2. Press 'D' (capital D)
@@ -150,6 +162,7 @@ rwreader --info
   - List updates on return
 
 #### 4.5 Delete Article from List (Issue #32, PR #33)
+
 - **Steps**:
   1. In article list, highlight an article
   2. Press 'D'
@@ -162,6 +175,7 @@ rwreader --info
 ### 5. Browser Integration Tests
 
 #### 5.1 Open Article in Browser
+
 - **Steps**:
   1. Open article or highlight in list
   2. Press 'o'
@@ -171,6 +185,7 @@ rwreader --info
   - App remains functional
 
 #### 5.2 Link Extraction (Ctrl+L)
+
 - **Steps**:
   1. Open article with links
   2. Press Ctrl+L
@@ -184,6 +199,7 @@ rwreader --info
 ### 6. Theme and UI Tests
 
 #### 6.1 Dark Mode Toggle
+
 - **Steps**: Press 'd' to toggle dark mode
 - **Expected**:
   - Theme switches between light and dark
@@ -191,6 +207,7 @@ rwreader --info
   - No visual glitches
 
 #### 6.2 Help Screen
+
 - **Steps**: Press 'h' or '?'
 - **Expected**:
   - Help screen shows all keybindings
@@ -199,6 +216,7 @@ rwreader --info
 ### 7. Edge Cases and Error Handling
 
 #### 7.1 Empty Category
+
 - **Steps**: Open a category with no articles
 - **Expected**:
   - Graceful message
@@ -206,6 +224,7 @@ rwreader --info
   - Can navigate away
 
 #### 7.2 Network Error
+
 - **Steps**:
   1. Disconnect network
   2. Try to refresh
@@ -215,6 +234,7 @@ rwreader --info
   - Can retry when network returns
 
 #### 7.3 Rapid Key Presses
+
 - **Steps**: Rapidly press various keys (j, k, r, ESC, etc.)
 - **Expected**:
   - No crashes
@@ -222,6 +242,7 @@ rwreader --info
   - UI remains responsive
 
 #### 7.4 Last Article in List
+
 - **Steps**:
   1. Move to last article in a list
   2. Archive/delete it
@@ -234,6 +255,7 @@ rwreader --info
 ### 8. Workflow Integration Tests
 
 #### 8.1 Complete Article Workflow
+
 - **Steps**:
   1. Start in Inbox
   2. Read article
@@ -244,6 +266,7 @@ rwreader --info
 - **Expected**: Article flow is seamless
 
 #### 8.2 Batch Processing
+
 - **Steps**:
   1. Open Inbox
   2. Archive multiple articles using 'a', 'J' pattern
@@ -253,6 +276,7 @@ rwreader --info
 ## Known Issues
 
 ### Fixed
+
 - ✅ Issue #24: Duplicate widget IDs on refresh (Fixed in PR #25, #31)
 - ✅ Issue #26: Refresh not fetching from API (Fixed in PR #27)
 - ✅ Issue #28: Category refresh improvements (Fixed in PR #29)
@@ -260,6 +284,7 @@ rwreader --info
 - ✅ Issue #32: Delete action NoActiveWorker error (Fixed in PR #33)
 
 ### In Progress
+
 - 🔧 Issue #34: Article list not updating after archive + refresh crash
 
 ## Reporting Issues
@@ -299,18 +324,21 @@ Error loading categories/articles
 ## Performance Testing
 
 ### Response Times
+
 - Category load: Should be < 2 seconds
 - Article list load: Should be < 3 seconds
 - Article open: Should be < 1 second (if cached)
 - Refresh: Should complete in < 5 seconds
 
 ### Memory Usage
+
 - Monitor for memory leaks during extended use
 - Check logs for excessive cache growth
 
 ## Automated Testing
 
 Currently, rwreader uses manual testing. Future improvements:
+
 - Unit tests for client methods
 - Integration tests for UI flows
 - Regression test suite

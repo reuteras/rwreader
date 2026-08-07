@@ -9,6 +9,7 @@ I've analyzed **termflux** (a Python Textual-based Miniflux TUI client) and the 
 ## 1. PROJECT STRUCTURE COMPARISON
 
 ### termflux (143 lines, Single File)
+
 ```text
 /tmp/termflux/
 ├── termflux.py          (143 lines - complete application)
@@ -18,6 +19,7 @@ I've analyzed **termflux** (a Python Textual-based Miniflux TUI client) and the 
 ```
 
 ### rwreader (20+ files, Modular)
+
 ```text
 src/rwreader/
 ├── main.py
@@ -34,6 +36,7 @@ src/rwreader/
 ```
 
 ### Miniflux Python Client (1071 lines, Single File API Library)
+
 ```text
 /tmp/python-client/
 ├── miniflux.py          (1071 lines - complete API client)
@@ -45,6 +48,7 @@ src/rwreader/
 ```
 
 **Analysis:**
+
 - **rwreader** is the most modular (proper separation of concerns)
 - **termflux** is minimalist (single file, ~143 LOC vs rwreader's 1277 in app.py alone)
 - **Miniflux client** shows that single-file can scale to 1071 LOC with proper organization
@@ -55,6 +59,7 @@ src/rwreader/
 ## 2. TEXTUAL USAGE PATTERNS
 
 ### termflux (Textual 0.85.0+)
+
 ```python
 from textual import app, screen, widgets
 
@@ -106,6 +111,7 @@ class EntryScreen(screen.ModalScreen):
 ```
 
 **Key Patterns:**
+
 - Declarative BINDINGS dictionary (clean keybindings)
 - Event-driven with `on_mount()` for initialization
 - Composition-based UI with `compose()` method
@@ -114,6 +120,7 @@ class EntryScreen(screen.ModalScreen):
 - Event handlers: `on_data_table_row_selected()`
 
 ### rwreader (Textual 0.27.0+)
+
 ```python
 # From app.py
 class RwReaderApp(App):
@@ -134,6 +141,7 @@ class RwReaderApp(App):
 ```
 
 **Key Patterns:**
+
 - Similar BINDINGS approach
 - Custom widget hierarchy (Navigation, ArticleList, ArticleViewer)
 - More complex layout with Container
@@ -141,6 +149,7 @@ class RwReaderApp(App):
 - Custom widget types in separate files
 
 ### Miniflux Python Client (API Library)
+
 ```python
 class Client:
     def __init__(self, url, username=None, password=None, api_key=None, session=None):
@@ -156,6 +165,7 @@ class Client:
 ```
 
 **Key Patterns:**
+
 - Session-based HTTP client
 - Comprehensive error handling with custom exceptions
 - Follows REST API conventions
@@ -166,6 +176,7 @@ class Client:
 ## 3. TESTING APPROACHES
 
 ### Miniflux Python Client (BEST PRACTICE)
+
 ```text
 1350 test lines covering:
 - Error handling (404, 401, 403, 500, 400)
@@ -199,11 +210,13 @@ def test_get_entries(self):
 ```
 
 ### termflux (NO TESTS)
+
 - No test infrastructure
 - Minimal code means less testing burden
 - Single file makes testing simpler if needed
 
 ### rwreader (NO TESTS)
+
 - No test infrastructure mentioned in CLAUDE.md
 - Should implement tests for:
   - API client (readwise-api integration)
@@ -213,6 +226,7 @@ def test_get_entries(self):
 
 **Recommendation for rwreader:**
 Implement unit tests following Miniflux's pattern:
+
 ```python
 # tests/test_client.py
 def test_get_articles(self):
@@ -236,19 +250,23 @@ def test_1password_integration(self):
 ## 4. ARCHITECTURAL PATTERNS
 
 ### termflux: MINIMALIST APPROACH
+
 **Pros:**
+
 - Very simple, easy to understand
 - Fast startup time
 - Minimal dependencies
 - Good for learning Textual
 
 **Cons:**
+
 - Not scalable for complex features
 - Hard to extend without monolithic changes
 - No separation of concerns
 - Single file becomes unmaintainable at 500+ LOC
 
 **Architecture:**
+
 ```text
 main() → login_flow() → ui() → Termflux(App)
                                    ├── on_mount() [fetch data]
@@ -260,7 +278,9 @@ main() → login_flow() → ui() → Termflux(App)
 ```
 
 ### rwreader: MODULAR ARCHITECTURE (RECOMMENDED)
+
 **Pros:**
+
 - Clean separation of concerns
 - Reusable components
 - Progressive loading
@@ -268,11 +288,13 @@ main() → login_flow() → ui() → Termflux(App)
 - Extensible design
 
 **Cons:**
+
 - More complex
 - More files to manage
 - Potentially higher memory overhead
 
 **Architecture:**
+
 ```text
 main.py [entry point]
     ├── config.py [configuration management]
@@ -297,7 +319,9 @@ main.py [entry point]
 ```
 
 ### Miniflux Client: LIBRARY PATTERN
+
 **Focus:** API abstraction layer
+
 - No UI, just HTTP client
 - Comprehensive error handling
 - 100% test coverage
@@ -308,6 +332,7 @@ main.py [entry point]
 ## 5. MODERN TEXTUAL PATTERNS & BEST PRACTICES
 
 ### Pattern 1: Reactive Attributes (Textual 0.70+)
+
 **Status:** Not used in termflux; should consider for rwreader
 
 ```python
@@ -324,6 +349,7 @@ class ArticleList(Static):
 ```
 
 ### Pattern 2: Message System (Textual 0.50+)
+
 **Status:** Not used in termflux; rwreader could use more
 
 ```python
@@ -347,6 +373,7 @@ def on_article_selected(self, message: ArticleSelected) -> None:
 ```
 
 ### Pattern 3: Containers & Layout (Textual 0.27+)
+
 **Status:** Used in rwreader; termflux doesn't need it (too simple)
 
 ```python
@@ -360,6 +387,7 @@ class MainScreen(Screen):
 ```
 
 ### Pattern 4: Query API (Textual 0.20+)
+
 **Status:** Both projects use it
 
 ```python
@@ -370,6 +398,7 @@ headers = self.query(Header)
 ```
 
 ### Pattern 5: Binding Metadata (Textual 0.20+)
+
 **Status:** Both use it; termflux example shows good practice
 
 ```python
@@ -381,6 +410,7 @@ BINDINGS = [
 ```
 
 ### Pattern 6: Context Managers & Cleanup
+
 **Status:** Not used in termflux; rwreader has error handling
 
 ```python
@@ -400,6 +430,7 @@ def on_unmount(self) -> None:
 ```
 
 ### Pattern 7: Loading States & Async
+
 **Status:** rwreader has progressive loading; termflux doesn't need it
 
 ```python
@@ -415,6 +446,7 @@ async def load_data(self):
 ```
 
 ### Pattern 8: CSS Styling (Textual 0.10+)
+
 **Status:** Not visible in termflux/rwreader code shown
 
 ```python
@@ -435,6 +467,7 @@ class MyApp(App):
 ## 6. DEPENDENCIES COMPARISON
 
 ### termflux
+
 ```toml
 dependencies = [
     "appdirs>=1.4.4",           # Config directory management
@@ -451,6 +484,7 @@ dev = [
 ```
 
 ### rwreader
+
 ```toml
 dependencies = [
     "textual>=0.27.0",          # TUI framework
@@ -472,6 +506,7 @@ dev = [
 ```
 
 ### Miniflux Python Client
+
 ```toml
 dependencies = [
     "requests"                  # Only HTTP dependency
@@ -481,6 +516,7 @@ dependencies = [
 ```
 
 **Observations:**
+
 - rwreader: More dependencies, but justified
 - termflux: Minimal, uses newer Textual (0.85 vs 0.27)
 - **Action item:** Consider updating Textual version in rwreader from 0.27.0 to 0.85+
@@ -491,6 +527,7 @@ dependencies = [
 ## 7. CONFIGURATION PATTERNS
 
 ### termflux: Simple JSON
+
 ```python
 def config_file() -> pathlib.Path:
     return pathlib.Path(appdirs.user_config_dir(APPNAME)) / "config.json"
@@ -509,6 +546,7 @@ api_key = input("api key ")
 **Cons:** No encryption, no advanced options
 
 ### rwreader: TOML + 1Password
+
 ```toml
 # ~/.rwreader.toml
 [general]
@@ -539,6 +577,7 @@ token = "op read op://vault/item/token"  # 1Password integration!
 ## 8. ERROR HANDLING COMPARISON
 
 ### termflux: Minimal
+
 ```python
 def is_configured() -> None:
     config = read_config()
@@ -549,6 +588,7 @@ def is_configured() -> None:
 ```
 
 ### rwreader: Comprehensive
+
 ```python
 # From CLAUDE.md:
 - Error handling at each layer
@@ -559,6 +599,7 @@ def is_configured() -> None:
 ```
 
 ### Miniflux Client: BEST PRACTICE
+
 ```python
 class ClientError(Exception):
     def __init__(self, response):
@@ -587,6 +628,7 @@ Implement specific exception types for different error scenarios.
 ## 9. KEY FINDINGS & RECOMMENDATIONS
 
 ### What termflux Does Well
+
 1. **Simple learning model** - Good for understanding Textual basics
 2. **Fast startup** - Minimal initialization
 3. **Modern Textual** (0.85.0) - Uses latest features
@@ -594,6 +636,7 @@ Implement specific exception types for different error scenarios.
 5. **Modal screens** - Nice navigation pattern
 
 ### What rwreader Does Well (Don't Change!)
+
 1. **Modular architecture** - Proper separation of concerns
 2. **Progressive loading** - Better UX for large datasets
 3. **Configuration management** - Secure token handling
@@ -602,6 +645,7 @@ Implement specific exception types for different error scenarios.
 6. **Three-pane layout** - Effective for browsing
 
 ### What Both Miss
+
 1. **No automated tests** - Should implement unit tests
 2. **No type checking** - Consider mypy for both
 3. **Limited async patterns** - Could use `work()` for long operations
@@ -611,6 +655,7 @@ Implement specific exception types for different error scenarios.
 ### Specific Recommendations for rwreader
 
 #### 1. ADD UNIT TESTS
+
 ```python
 # tests/test_client.py
 import unittest
@@ -650,6 +695,7 @@ class TestConfiguration(unittest.TestCase):
 ```
 
 **Implementation:**
+
 ```bash
 # Add to pyproject.toml:
 [tool.pytest.ini_options]
@@ -664,6 +710,7 @@ python -m unittest discover -s tests
 ```
 
 #### 2. CONSIDER UPDATING TEXTUAL VERSION
+
 ```toml
 # Current: textual>=0.27.0
 # Recommended: textual>=0.85.0
@@ -677,6 +724,7 @@ python -m unittest discover -s tests
 ```
 
 #### 3. ADD TYPE CHECKING
+
 ```bash
 # Install mypy
 uv pip install mypy
@@ -693,6 +741,7 @@ mypy src/rwreader/
 ```
 
 #### 4. IMPLEMENT REACTIVE PATTERNS FOR STATE MANAGEMENT
+
 ```python
 # In ui/app.py
 from textual.reactive import reactive
@@ -708,6 +757,7 @@ class RwReaderApp(App):
 ```
 
 #### 5. ADD PROPER EXCEPTION HIERARCHY
+
 ```python
 # In client.py
 class ReadwiseError(Exception):
@@ -727,6 +777,7 @@ class ReadwiseRateLimit(ReadwiseError):
 ```
 
 #### 6. CONSIDER ASYNC LOADING FOR LARGE OPERATIONS
+
 ```python
 # In ui/app.py
 def on_mount(self) -> None:
@@ -745,6 +796,7 @@ async def load_data(self) -> None:
 ```
 
 #### 7. IMPROVE LOGGING WITH STRUCTURED LOGGING
+
 ```python
 # Current: Basic logging setup
 # Recommended: Use structlog for better formatting
@@ -766,6 +818,7 @@ logger.debug(f"Loaded {len(articles)} articles")
 ```
 
 #### 8. ADD KEYBOARD SHORTCUT DOCUMENTATION
+
 ```python
 # Current: BINDINGS in app.py
 # Recommendation: Add help screen linking to bindings
@@ -795,6 +848,7 @@ class HelpScreen(Screen):
 ```
 
 #### 9. IMPLEMENT PAGINATION/LOAD MORE PROPERLY
+
 ```python
 # Current: Progressive loading mentioned
 # Ensure proper implementation:
@@ -822,6 +876,7 @@ def action_load_more(self) -> None:
 ```
 
 #### 10. ADD DEVELOPMENT DOCUMENTATION
+
 ```markdown
 # Development Guide
 
@@ -832,11 +887,13 @@ uv pip install -e ".[dev]"
 ```
 
 ## Running with Debug
+
 ```bash
 rwreader --debug
 ```
 
 ## Running Tests
+
 ```bash
 pytest tests/ -v
 mypy src/rwreader/
@@ -845,11 +902,13 @@ ruff format .
 ```
 
 ## Textual Dev Tools
+
 ```bash
 textual run --dev src/rwreader/main.py
 ```
 
 ## Project Structure
+
 ```text
 - src/rwreader/ - Source code
 - tests/ - Unit tests
@@ -860,40 +919,43 @@ textual run --dev src/rwreader/main.py
 
 ## 10. COMPARISON TABLE
 
-| Aspect | termflux | rwreader | miniflux-client |
-| ------ | -------- | -------- | --------------- |
-| **LOC (core)** | 143 | 1277+ | 1071 |
-| **Structure** | Single file | Modular | Single file |
-| **Textual v** | 0.85.0+ | 0.27.0 | N/A (API) |
-| **Tests** | None | None | 1350 LOC (93%) |
-| **Type hints** | Some | Some | Complete |
-| **Error handling** | Basic | Good | Excellent |
-| **Config** | Simple JSON | TOML + 1Password | N/A |
-| **Async** | No | Mentioned | N/A |
-| **Reactive attrs** | No | No | N/A |
-| **Custom widgets** | No | Yes | N/A |
-| **Progressive load** | No | Yes | N/A |
-| **UI complexity** | Simple | Complex | N/A |
+| Aspect               | termflux    | rwreader         | miniflux-client |
+|----------------------|-------------|------------------|-----------------|
+| **LOC (core)**       | 143         | 1277+            | 1071            |
+| **Structure**        | Single file | Modular          | Single file     |
+| **Textual v**        | 0.85.0+     | 0.27.0           | N/A (API)       |
+| **Tests**            | None        | None             | 1350 LOC (93%)  |
+| **Type hints**       | Some        | Some             | Complete        |
+| **Error handling**   | Basic       | Good             | Excellent       |
+| **Config**           | Simple JSON | TOML + 1Password | N/A             |
+| **Async**            | No          | Mentioned        | N/A             |
+| **Reactive attrs**   | No          | No               | N/A             |
+| **Custom widgets**   | No          | Yes              | N/A             |
+| **Progressive load** | No          | Yes              | N/A             |
+| **UI complexity**    | Simple      | Complex          | N/A             |
 
 ---
 
 ## 11. FINAL RECOMMENDATIONS (PRIORITY ORDER)
 
 ### P0 (Critical)
+
 1. Add comprehensive unit tests (follow miniflux-client pattern)
 2. Update Textual to 0.85.0+ for modern features
 3. Implement proper exception hierarchy
 
 ### P1 (Important)
-4. Add type checking with mypy
-5. Improve error handling with specific exceptions
-6. Implement reactive attributes for state
+
+1. Add type checking with mypy
+2. Improve error handling with specific exceptions
+3. Implement reactive attributes for state
 
 ### P2 (Nice to Have)
-7. Add async/await patterns for long operations
-8. Consider structured logging
-9. Add development guide
-10. Implement message-based inter-widget communication
+
+1. Add async/await patterns for long operations
+2. Consider structured logging
+3. Add development guide
+4. Implement message-based inter-widget communication
 
 ---
 

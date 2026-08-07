@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.1] - 2024-01-XX
 
 ### Added
+
 - J/k vim-style navigation in content pane for scrolling article text
 - Explicit key bindings to LinkableMarkdownViewer widget for better keyboard support
 - Enhanced pyproject.toml with comprehensive classifiers for PyPI
@@ -15,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python version specification (>=3.11,<3.14) to handle dependency constraints
 
 ### Fixed
+
 - J/k navigation not working in content pane (now supports scroll-based widgets)
 - Linting issues in test suite (magic values, import ordering)
 - Missing docstrings in test modules
@@ -23,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Import statement ordering in test configuration
 
 ### Changed
+
 - Improved action handlers to support both list-based and scroll-based widgets
 - Updated README with accurate and comprehensive keyboard shortcut documentation
 - Enhanced keyboard shortcut tables with proper formatting
@@ -32,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2024-01-XX
 
 ### Added
+
 - Initial release of rwreader
 - Three-pane TUI layout (Navigation, Articles, Content)
 - Terminal user interface using Textual framework
@@ -61,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 #### Navigation
+
 - Move between articles with j/k or arrow keys
 - Navigate between categories with J/K
 - Jump directly to categories with I/F/L/A shortcuts
@@ -68,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic focus management
 
 #### Article Management
+
 - Move articles between categories
 - Delete articles with confirmation
 - View article metadata (title, author, source, word count, etc.)
@@ -75,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mark articles as read/unread (via status tracking)
 
 #### Content Viewing
+
 - Syntax-highlighted markdown rendering
 - Article content with proper formatting
 - Maximizable content pane for full-screen reading
@@ -82,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Link highlighting and interaction
 
 #### Configuration
+
 - TOML-based configuration file
 - Support for 1Password CLI credential management
 - Customizable theme, font size, and reading width
@@ -89,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment variable support for token
 
 #### User Experience
+
 - Responsive keyboard controls
 - Dark and light theme toggle
 - Smooth scrolling and navigation
@@ -102,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Upcoming
 
 ### Planned Features
+
 - Search functionality
 - Tagging and filtering
 - Batch operations (move multiple articles)

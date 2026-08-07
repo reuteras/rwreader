@@ -48,10 +48,12 @@ Tests are marked with categories:
 ### CI/CD
 
 Tests run automatically on:
+
 - Every push to `main`
 - Every pull request
 
 The CI workflow:
+
 1. Runs linting (ruff)
 2. Runs type checking (mypy)
 3. Runs unit tests (excluding integration)
@@ -77,16 +79,19 @@ tests/
 ## Coverage by Module
 
 ### High Coverage (>75%)
+
 - ✅ `config.py`: 77%
 - ✅ `exceptions.py`: 88%
 - ✅ `cache.py`: 94%
 
 ### Medium Coverage (10-50%)
+
 - ⚠️ `markdown_converter.py`: 10%
 - ⚠️ `ui_helpers.py`: 7%
 - ⚠️ Various screens: 0-52%
 
 ### Zero Coverage (Needs Tests)
+
 - ❌ UI screens: `article_list.py`, `article_reader.py`, `category_list.py`
 - ❌ UI widgets: `api_status.py`, `article_viewer.py`, `linkable_markdown_viewer.py`
 
@@ -165,6 +170,7 @@ def test_with_fixtures(
 Tests for previously fixed bugs:
 
 ### Planned (Need to Add)
+
 - [ ] Test for duplicate widget ID prevention (Issues #24, #30)
 - [ ] Test for category refresh (Issues #26, #28)
 - [ ] Test for delete action worker context (Issue #32)
@@ -228,6 +234,7 @@ uv run pytest -k "cache"
 ## Recent Fixes
 
 ### Test Isolation (Fixed in PR #37)
+
 - **Problem**: Tests were prompting for 1Password login and hitting real Readwise API
 - **Root Cause**: `app_with_mock_client` fixture was creating `RWReader()` which loaded real `Configuration`
 - **Solution**: Mock `Configuration` class before creating app in test fixture
@@ -236,6 +243,7 @@ uv run pytest -k "cache"
 ## Known Issues
 
 ### Integration Tests Architectural Mismatch
+
 - **Problem**: 12 integration tests fail due to architectural changes
 - **Examples**:
   - Tests expect widgets like `#articles` and `#navigation` that don't exist in default screen
@@ -245,6 +253,7 @@ uv run pytest -k "cache"
 - **Future**: Refactor integration tests to match current three-screen architecture (CategoryList, ArticleList, ArticleReader)
 
 ### Outdated Tests (Skipped)
+
 - **Problem**: Some tests expect deprecated attributes
 - **Example**: `test_navigate_between_categories` expects `app.current_category`
 - **Status**: Skipped with `@pytest.mark.skip` and TODO to refactor
@@ -263,6 +272,7 @@ When adding new features:
 ## CI/CD Status
 
 View test results:
+
 - GitHub Actions: Check PR "Checks" tab
 - Coverage Reports: See PR comments (if Codecov configured)
 
