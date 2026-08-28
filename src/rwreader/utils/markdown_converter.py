@@ -6,7 +6,7 @@ from datetime import datetime
 from http import HTTPStatus
 from urllib.parse import quote, urlparse
 
-import httpx
+import httpx2 as httpx
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 

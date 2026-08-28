@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, urlparse
 
-import httpx
+import httpx2 as httpx
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
