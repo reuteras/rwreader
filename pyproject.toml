@@ -6,12 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "rwreader"
 version = "0.1.3"
 description = "A terminal user interface for Readwise Reader"
-authors = [
-    {name = "Peter Reuterås", email = "peter@reuteras.net"},
-]
+authors = [{ name = "Peter Reuterås", email = "peter@reuteras.net" }]
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
-license = {text = "MIT"}
+license = { text = "MIT" }
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -30,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "textual>=8.2.7",
-    "httpx2==2.12.0",
+    "httpx2>=2.12.0",
     "rich>=15.0.0",
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
@@ -48,7 +46,7 @@ rwreader = "rwreader.main:main"
 "Documentation" = "https://github.com/reuteras/rwreader#readme"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 include-package-data = true
 
 [dependency-groups]
@@ -66,17 +64,17 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 lint.select = [
-    "PL",   # Pylint
-    "E",    # pycodestyle
-    "F",    # pyflakes
-    "I",    # isort
-    "D",    # pydocstyle
-    "B",    # flake8-bugbear
-    "UP",   # pyupgrade
-    "RUF",  # Ruff-specific
+    "PL",  # Pylint
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "D",   # pydocstyle
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "RUF", # Ruff-specific
 ]
 lint.ignore = [
-    "E501",  # line too long, handled by black
+    "E501", # line too long, handled by black
 ]
 fix = true
 
@@ -111,7 +109,7 @@ docstring-code-line-length = "dynamic"
 readwise-api = { git = "https://github.com/reuteras/readwise-api.git" }
 
 [tool.ruff.lint.pydocstyle]
-convention="google"
+convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
