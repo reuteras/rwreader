@@ -2,14 +2,14 @@
 
 ## Overview
 
-RWReader has **166 automated tests** covering critical functionality. Tests use pytest and run automatically on every PR via GitHub Actions.
+RWReader has **198 automated tests** covering critical functionality. Tests use pytest and run automatically on every PR via GitHub Actions.
 
 ## Test Statistics
 
-- **Total Tests**: 166
-- **Test Files**: 8
-- **Lines of Test Code**: ~2,400
-- **Current Coverage**: 13% (target: 50%+)
+- **Total Tests**: 198 (182 unit + 16 integration, of which 2 integration tests are skipped)
+- **Test Files**: 9
+- **Lines of Test Code**: ~2,800
+- **Current Coverage**: 17% overall (40% when running only the fast/non-integration suite; target: 50%+)
 
 ## Running Tests
 
@@ -40,10 +40,10 @@ uv run pytest -x
 
 ### Test Markers
 
-Tests are marked with categories:
+Two markers are registered in `pyproject.toml`:
 
-- `@pytest.mark.unit`: Fast unit tests with mocked dependencies
-- `@pytest.mark.integration`: Slow tests that may hit real APIs
+- `unit`: Fast unit tests with mocked dependencies (registered for use, but not currently applied to any test — every test that isn't marked `integration` is treated as a unit test)
+- `integration`: Slower Textual `Pilot`-driven end-to-end tests (all use a mocked API client, so none hit the real Readwise API)
 
 ### CI/CD
 
@@ -52,48 +52,67 @@ Tests run automatically on:
 - Every push to `main`
 - Every pull request
 
-The CI workflow:
+The CI workflow runs on Python 3.11, 3.12, and 3.13:
 
-1. Runs linting (ruff)
-2. Runs type checking (mypy)
-3. Runs unit tests (excluding integration)
-4. Generates coverage report
-5. Checks coverage threshold (currently 10%)
+1. Runs linting (`ruff check`, `ruff format --check`)
+2. Runs type checking (mypy) — currently `continue-on-error: true`, so type errors don't fail the build
+3. Runs tests, excluding integration tests (`-m "not integration"`), with coverage reporting
+4. Checks coverage threshold (currently 10%, enforced with `--cov-fail-under=10`)
 
-See `.github/workflows/tests.yml` for configuration.
+See `.github/workflows/tests.yml` for configuration. Note that integration tests are **not** run in CI — only locally via `pytest -m integration`.
 
 ## Test Structure
 
 ```text
 tests/
 ├── conftest.py                    # Shared fixtures
-├── test_client.py                 # API client tests
-├── test_config.py                 # Configuration tests
-├── test_cache.py                  # Caching logic tests
-├── test_markdown_converter.py     # Markdown processing tests
-├── test_ui_helpers.py             # UI utility tests
-├── test_exceptions.py             # Error handling tests
-└── test_app_integration.py        # End-to-end integration tests
+├── test_client.py                 # API client tests (24 tests)
+├── test_config.py                 # Configuration tests (15 tests)
+├── test_cache.py                  # Caching logic tests (12 tests)
+├── test_markdown_converter.py     # Markdown processing tests (25 tests)
+├── test_highlight_manager.py      # Highlight extraction/formatting tests (24 tests)
+├── test_article_reader.py         # Article reader screen tests (9 tests)
+├── test_ui_helpers.py             # UI utility tests (47 tests)
+├── test_exceptions.py             # Error handling tests (26 tests)
+└── test_app_integration.py        # End-to-end integration tests (16 tests, Textual Pilot)
 ```
 
 ## Coverage by Module
 
-### High Coverage (>75%)
+Figures below are from the full run (unit + integration). Running only the fast suite
+(`pytest -m "not integration"`) currently yields ~40% overall, since several screens are
+exercised almost entirely by the Pilot-driven integration tests.
 
-- ✅ `config.py`: 77%
-- ✅ `exceptions.py`: 88%
-- ✅ `cache.py`: 94%
+### High Coverage (>60%)
 
-### Medium Coverage (10-50%)
+- ✅ `ui/app.py`: 59%
+- ✅ `exceptions.py`: 69%
+- ✅ `ui/screens/help.py`: 64%
 
-- ⚠️ `markdown_converter.py`: 10%
-- ⚠️ `ui_helpers.py`: 7%
-- ⚠️ Various screens: 0-52%
+### Medium Coverage (20-60%)
+
+- ⚠️ `cache.py`: 50%
+- ⚠️ `ui/screens/fullscreen.py`: 52%
+- ⚠️ `ui/screens/confirm.py`: 35%
+- ⚠️ `ui/screens/save_improved.py`: 34%
+- ⚠️ `ui/widgets/linkable_markdown_viewer.py`: 31%
+- ⚠️ `main.py`: 25%
+
+### Low Coverage (<20%)
+
+- ❌ `client.py`: 12%
+- ❌ `config.py`: 13%
+- ❌ `markdown_converter.py`: 13%
+- ❌ `highlight_manager.py`: 14%
+- ❌ `ui/screens/link_screens.py`: 15%
+- ❌ `ui/screens/article_reader.py`: 16%
+- ❌ `ui/screens/article_list.py`: 17%
+- ❌ `ui/screens/category_list.py`: 19%
+- ❌ `ui_helpers.py`: 8%
 
 ### Zero Coverage (Needs Tests)
 
-- ❌ UI screens: `article_list.py`, `article_reader.py`, `category_list.py`
-- ❌ UI widgets: `api_status.py`, `article_viewer.py`, `linkable_markdown_viewer.py`
+- ❌ UI widgets: `api_status.py`, `article_viewer.py`, `load_more.py`
 
 ## Writing Tests
 
@@ -242,22 +261,21 @@ uv run pytest -k "cache"
 
 ## Known Issues
 
-### Integration Tests Architectural Mismatch
+All 198 tests currently pass (182 unit + 14 integration), with 2 integration tests skipped.
 
-- **Problem**: 12 integration tests fail due to architectural changes
-- **Examples**:
-  - Tests expect widgets like `#articles` and `#navigation` that don't exist in default screen
-  - Tests expect `app.current_category` attribute removed in refactoring
-- **Impact**: Tests marked with `@pytest.mark.integration` currently fail
-- **Status**: Tests are properly isolated (no real API calls), but need updates to match current architecture
-- **Future**: Refactor integration tests to match current three-screen architecture (CategoryList, ArticleList, ArticleReader)
+### Skipped Tests
 
-### Outdated Tests (Skipped)
+- **Tests**: `test_move_article_to_archive`, `test_move_article_to_later` (both in `test_app_integration.py`)
+- **Problem**: Textual's test `Pilot` times out when widgets are removed and recreated during `populate_list()`
+- **Impact**: The underlying functionality works correctly in the real app; only the test harness is affected
+- **Status**: Skipped with `@pytest.mark.skip` and an explanatory reason
+- **Future**: Investigate an alternative way to assert on list repopulation that avoids the widget-lifecycle timeout
 
-- **Problem**: Some tests expect deprecated attributes
-- **Example**: `test_navigate_between_categories` expects `app.current_category`
-- **Status**: Skipped with `@pytest.mark.skip` and TODO to refactor
-- **Future**: Update tests to check screen state instead of app attributes
+### Type Checking Not Enforced in CI
+
+- **Problem**: `mypy src/rwreader --ignore-missing-imports` currently reports 37 errors across 13 files
+- **Impact**: The CI type-checking step runs with `continue-on-error: true`, so these errors don't fail builds
+- **Future**: Fix outstanding mypy errors and remove `continue-on-error` from the workflow
 
 ## Contributing
 

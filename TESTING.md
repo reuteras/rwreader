@@ -282,10 +282,7 @@ rwreader --info
 - ✅ Issue #28: Category refresh improvements (Fixed in PR #29)
 - ✅ Issue #30: Duplicate IDs from explicit widget IDs (Fixed in PR #31)
 - ✅ Issue #32: Delete action NoActiveWorker error (Fixed in PR #33)
-
-### In Progress
-
-- 🔧 Issue #34: Article list not updating after archive + refresh crash
+- ✅ Issue #34: Article list not updating after archive + refresh crash (Fixed via `on_resume` hook in `article_list.py`, commit `362c7e3`)
 
 ## Reporting Issues
 
@@ -337,9 +334,9 @@ Error loading categories/articles
 
 ## Automated Testing
 
-Currently, rwreader uses manual testing. Future improvements:
-
-- Unit tests for client methods
-- Integration tests for UI flows
-- Regression test suite
-- CI/CD pipeline with automated checks
+rwreader also has an automated test suite (198 tests, run via `uv run pytest`) covering the
+API client, config, caching, markdown conversion, highlight handling, and UI flows via
+Textual's `Pilot`. This document covers manual scenarios that complement those tests —
+particularly ones that need a real terminal, real API responses, or human judgment about
+visual/UX quality. See [TESTING_AUTOMATED.md](TESTING_AUTOMATED.md) for details on the
+automated suite, coverage, and CI/CD pipeline.
