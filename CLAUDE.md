@@ -76,7 +76,11 @@ uv pip install -e ".[dev]"     # Install in development mode
 
 ### Testing
 
-No testing implemented.
+198 automated tests (pytest) covering client, cache, config, and UI. See [TESTING_AUTOMATED.md](TESTING_AUTOMATED.md) for the automated suite and [TESTING.md](TESTING.md) for manual QA scenarios.
+
+```bash
+uv run pytest
+```
 
 ### Running & Development
 
@@ -91,7 +95,7 @@ textual run --dev src/rwreader/main.py    # Run with Textual dev tools
 
 ## Key Dependencies
 
-- **textual>=0.27.0**: TUI framework
+- **textual>=8.2.7**: TUI framework
 - **httpx>=0.24.0**: HTTP client
 - **toml>=0.10.2**: Configuration parsing
 - **rich>=13.3.5**: Rich text and formatting
