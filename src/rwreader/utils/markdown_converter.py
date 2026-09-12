@@ -213,12 +213,12 @@ def _convert_underline_headers_to_hash(markdown_text: str) -> str:
             # Check if next line is a header underline
             if current_line and next_line:
                 # Check for "====" pattern (level 2 header / ##)
-                if re.match(pattern=r"^=+$", string=next_line):
+                if re.search(pattern=r"^=+$", string=next_line):
                     result.append(f"## {current_line}")
                     i += 2
                     continue
                 # Check for "----" pattern (level 3 header / ###)
-                elif re.match(pattern=r"^-+$", string=next_line):
+                elif re.search(pattern=r"^-+$", string=next_line):
                     result.append(f"### {current_line}")
                     i += 2
                     continue
