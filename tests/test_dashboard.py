@@ -76,7 +76,7 @@ class TestFormatReadingTime:
 class TestDaysSinceAndBuckets:
     """Tests for days_since and age_bucket_label."""
 
-    def test_unparseable_and_empty(self) -> None:
+    def test_unparsable_and_empty(self) -> None:
         """Empty and garbage timestamps return None."""
         assert days_since("") is None
         assert days_since("not-a-date") is None

@@ -89,7 +89,7 @@ def _parse_timestamp(value: str) -> datetime | None:
 
 
 def days_since(value: str) -> int | None:
-    """Whole days between now and a timestamp string, or None if unparseable.
+    """Whole days between now and a timestamp string, or None if unparsable.
 
     Args:
         value: ISO-8601 or unix-seconds timestamp.
