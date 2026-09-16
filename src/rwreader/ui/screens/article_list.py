@@ -25,13 +25,14 @@ logger = logging.getLogger(__name__)
 class ArticleListScreen(Screen):
     """Screen showing articles in a category."""
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select_article", "Read"),
         Binding("a", "archive_article", "Archive"),
         Binding("l", "later_article", "Later"),
         Binding("i", "inbox_article", "Inbox"),
+        Binding("s", "shortlist_article", "Shortlist"),
         Binding("D", "delete_article", "Delete"),
         Binding("o", "open_browser", "Open in browser"),
         Binding("O", "open_source_browser", "Open source URL"),
@@ -74,7 +75,7 @@ class ArticleListScreen(Screen):
         logger.debug(f"Current articles count: {len(self.articles)}")
         # Clear cache and trigger a background refresh to sync with server
         if hasattr(self.app, "client"):
-            self.app.client.clear_cache()  # type: ignore
+            self.app.client.clear_cache()
         self.load_articles(load_more=False, from_refresh=False, use_retry=False)
 
     def on_show(self) -> None:
@@ -151,7 +152,7 @@ class ArticleListScreen(Screen):
                     self.notify, f"Loading {self.category} articles...", title="Loading"
                 )
 
-            client = self.app.client  # type: ignore
+            client = self.app.client
 
             # Get articles for the selected category
             # Use retry polling when requested to handle server-side caching
@@ -172,6 +173,8 @@ class ArticleListScreen(Screen):
                     ]
                 elif self.category == "later":
                     self.articles = client.get_later_with_retry(limit=limit)
+                elif self.category == "shortlist":
+                    self.articles = client.get_shortlist_with_retry(limit=limit)
                 elif self.category == "archive":
                     # Archive doesn't have a retry method yet, use regular
                     self.articles = client.get_archive(refresh=True, limit=limit)
@@ -194,6 +197,11 @@ class ArticleListScreen(Screen):
                 ]
             elif self.category == "later":
                 self.articles = client.get_later(
+                    refresh=not load_more,
+                    limit=limit,
+                )
+            elif self.category == "shortlist":
+                self.articles = client.get_shortlist(
                     refresh=not load_more,
                     limit=limit,
                 )
@@ -248,7 +256,7 @@ class ArticleListScreen(Screen):
             # Let Textual auto-generate IDs
             list_item = ListItem(Static(display_title, markup=False))
             # Store article ID in data for reference
-            list_item.data = {"article_id": str(article.get("id"))}  # type: ignore
+            list_item.data = {"article_id": str(article.get("id"))}  # type: ignore[attr-defined]
 
             # Style based on read status
             is_read = article.get("read", False) or article.get("state") == "finished"
@@ -335,6 +343,10 @@ class ArticleListScreen(Screen):
         """Move article to Inbox."""
         await self._move_article("inbox")
 
+    async def action_shortlist_article(self) -> None:
+        """Move article to Shortlist."""
+        await self._move_article("shortlist")
+
     async def _move_article(self, destination: str) -> None:
         """Move the highlighted article to a destination.
 
@@ -357,7 +369,7 @@ class ArticleListScreen(Screen):
             self.notify("API client not available", severity="error")
             return
 
-        client = self.app.client  # type: ignore
+        client = self.app.client
         success, message = move_article_to_destination(
             client=client, article_id=article_id, destination=destination
         )
@@ -397,7 +409,7 @@ class ArticleListScreen(Screen):
         if result and result.get("confirmed"):
             try:
                 if hasattr(self.app, "client"):
-                    client = self.app.client  # type: ignore
+                    client = self.app.client
                     client.delete_article(article_id=article_id)
                     self.notify("Article deleted", title="Success")
                     # Remove from list
@@ -458,7 +470,7 @@ class ArticleListScreen(Screen):
     def action_refresh(self) -> None:
         """Refresh articles."""
         if hasattr(self.app, "client"):
-            self.app.client.clear_cache()  # type: ignore
+            self.app.client.clear_cache()
         self.load_articles(load_more=False, from_refresh=True)
 
     def action_load_more(self) -> None:

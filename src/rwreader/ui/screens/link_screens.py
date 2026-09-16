@@ -1,14 +1,18 @@
 """Link selection screen."""
 
+import asyncio
 import logging
 import re
 import webbrowser
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import ParseResult, urlparse
 
 import httpx2 as httpx
+from textual import work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Label, ListItem, ListView
 
@@ -18,12 +22,22 @@ logger = logging.getLogger(name=__name__)
 class LinkSelectionScreen(ModalScreen):
     """Modal screen to show extracted links and allow selection."""
 
-    BINDINGS = [  # noqa: RUF012
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Cancel"),
         ("enter", "select", "Select"),
+        ("j", "cursor_down", "Down"),
+        ("k", "cursor_up", "Up"),
+        ("S", "save_all_readwise", "Save all to Readwise"),
     ]
 
-    def __init__(self, configuration, links, open_links="browser", open=False) -> None:
+    def __init__(
+        self,
+        configuration: Any,
+        links: list[tuple[str, str]] | None,
+        open_links: str = "browser",
+        open: bool = False,
+        title: str | None = None,
+    ) -> None:
         """Initialize the link selection screen.
 
         Args:
@@ -31,23 +45,26 @@ class LinkSelectionScreen(ModalScreen):
             links: List of tuples with link title and URL
             open_links: Action to perform on selected link
             open: Whether to open the link after saving to Readwise
+            title: Optional heading replacing the default for ``open_links``
         """
         super().__init__()
         self.links: Any = links or []  # Ensure links is never None
         self.open_links: str = open_links
         self.open: bool = open
         self.configuration: Any = configuration
+        self.title_text: str | None = title
         self.selected_index = 0
-        self.http_client = httpx.Client(follow_redirects=True)
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the link selection screen."""
-        if self.open_links == "browser":
-            title = "Select a link to open (ESC to go back):"
+        if self.title_text:
+            title = self.title_text
+        elif self.open_links == "browser":
+            title = "Select a link to open (ESC to go back, S saves all to Readwise):"
         elif self.open_links == "download":
-            title = "Select a link to download (ESC to go back):"
+            title = "Select a file to download (ESC to go back):"
         elif self.open_links == "readwise":
-            title = "Select a link to save to Readwise (ESC to go back):"
+            title = "Select a link to save to Readwise (ESC to go back, S saves all):"
         else:
             title = "Select a link (ESC to go back):"
 
@@ -86,9 +103,13 @@ class LinkSelectionScreen(ModalScreen):
         )
         link_list.focus()
 
-    def on_unmount(self) -> None:
-        """Clean up HTTP client when screen is unmounted."""
-        self.http_client.close()
+    def action_cursor_down(self) -> None:
+        """Move the highlight down."""
+        self.query_one(selector="#link-list", expect_type=ListView).action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        """Move the highlight up."""
+        self.query_one(selector="#link-list", expect_type=ListView).action_cursor_up()
 
     def _format_link_item(self, link: tuple) -> str:
         """Format a link for display in the list.
@@ -254,64 +275,135 @@ class LinkSelectionScreen(ModalScreen):
             )
             self.app.pop_screen()
 
+    def _download_folder(self) -> Path:
+        """Download folder from configuration, defaulting to ~/Downloads."""
+        folder = getattr(self.configuration, "download_folder", None)
+        if isinstance(folder, str | Path):
+            return Path(folder).expanduser()
+        return Path.home() / "Downloads"
+
+    def _download_target(self, link: str) -> Path | None:
+        """Compute a safe, non-clobbering path inside the download folder."""
+        folder = self._download_folder()
+        raw_filename: str = Path(urlparse(url=link).path).name or "downloaded_file"
+        filename = self._sanitize_filename(raw_filename)
+        download_path = (folder / filename).resolve()
+        try:
+            download_path.relative_to(folder.resolve())
+        except ValueError:
+            logger.error(msg=f"Path traversal attempt detected: {filename}")
+            return None
+        stem, dot, ext = filename.rpartition(".")
+        counter = 2
+        while download_path.exists():
+            candidate = (
+                f"{stem}-{counter}{dot}{ext}" if dot else f"{filename}-{counter}"
+            )
+            download_path = folder / candidate
+            counter += 1
+        return download_path
+
     def download_file(self, link: str) -> None:
-        """Download a file from the given URL using httpx.
+        """Download a file from the given URL in a background thread.
+
+        The worker is attached to the app so it survives this modal closing.
 
         Args:
             link: URL to download
         """
-        try:
-            # Extract filename from URL
-            raw_filename: str = Path(urlparse(url=link).path).name
-            if not raw_filename:
-                raw_filename = "downloaded_file"
+        download_path = self._download_target(link)
+        if download_path is None:
+            self.notify(
+                title="Download Error",
+                message="Invalid filename",
+                timeout=5,
+                severity="error",
+            )
+            return
 
-            # Sanitize filename to prevent path traversal
-            filename = self._sanitize_filename(raw_filename)
+        app = self.app
+        app.notify(title="Download", message=f"Downloading {download_path.name}…")
 
-            # Resolve to ensure it's within download folder
-            download_path = (self.configuration.download_folder / filename).resolve()
-
-            # Verify the resolved path is still within the download folder
+        def run() -> None:
             try:
-                download_path.relative_to(self.configuration.download_folder.resolve())
-            except ValueError:
-                logger.error(msg=f"Path traversal attempt detected: {filename}")
-                self.notify(
+                download_path.parent.mkdir(parents=True, exist_ok=True)
+                with (
+                    httpx.Client(follow_redirects=True, timeout=60) as client,
+                    client.stream(method="GET", url=link) as response,
+                ):
+                    response.raise_for_status()
+                    with open(file=download_path, mode="wb") as f:
+                        for chunk in response.iter_bytes():
+                            f.write(chunk)
+            except httpx.HTTPError as e:
+                logger.error(msg=f"HTTP error downloading file: {e}")
+                app.call_from_thread(
+                    app.notify,
                     title="Download Error",
-                    message="Invalid filename",
+                    message=f"HTTP error downloading file: {e!s}",
                     timeout=5,
                     severity="error",
                 )
                 return
-
-            with self.http_client.stream(method="GET", url=link) as response:
-                response.raise_for_status()
-                with open(file=download_path, mode="wb") as f:
-                    for chunk in response.iter_bytes():
-                        f.write(chunk)
-
-            self.notify(
+            except Exception as e:
+                logger.error(msg=f"Error downloading file: {e}")
+                app.call_from_thread(
+                    app.notify,
+                    title="Download Error",
+                    message=f"Error downloading file: {e!s}",
+                    timeout=5,
+                    severity="error",
+                )
+                return
+            app.call_from_thread(
+                app.notify,
                 title="Downloaded",
                 message=f"File downloaded to {download_path}",
                 timeout=5,
             )
-        except httpx.HTTPError as e:
-            logger.error(msg=f"HTTP error downloading file: {e}")
-            self.notify(
-                title="Download Error",
-                message=f"HTTP error downloading file: {e!s}",
-                timeout=5,
-                severity="error",
+
+        app.run_worker(run, thread=True, exclusive=False, name="download")
+
+    @work
+    async def action_save_all_readwise(self) -> None:
+        """Save every listed link to Readwise after confirmation."""
+        client = getattr(self.app, "client", None)
+        if client is None:
+            self.notify(title="Readwise", message="API client not available.")
+            return
+        urls = [url for _, url in self.links if url]
+        if not urls:
+            self.notify(title="Readwise", message="No links to save.")
+            return
+
+        from .confirm import ConfirmScreen  # noqa: PLC0415
+
+        result = await self.app.push_screen_wait(
+            ConfirmScreen(
+                title="Save to Readwise",
+                message=f"Save all {len(urls)} links to your Reader inbox?",
+                variant="primary",
             )
-        except Exception as e:
-            logger.error(msg=f"Error downloading file: {e}")
-            self.notify(
-                title="Download Error",
-                message=f"Error downloading file: {e!s}",
-                timeout=5,
-                severity="error",
+        )
+        if not result or not result.get("confirmed"):
+            return
+
+        loop = asyncio.get_event_loop()
+        saved = 0
+        failed = 0
+        for url in urls:
+            success, _ = await loop.run_in_executor(
+                None, partial(client.save_document, url=url)
             )
+            if success:
+                saved += 1
+            else:
+                failed += 1
+        self.notify(
+            title="Readwise",
+            message=f"Saved {saved} links" + (f", {failed} failed" if failed else ""),
+            severity="warning" if failed else "information",
+        )
 
     def _save_to_readwise(self, link: str) -> None:
         """Save the selected link to Readwise.
@@ -319,15 +411,19 @@ class LinkSelectionScreen(ModalScreen):
         Args:
             link: URL to save
         """
+        client = getattr(self.app, "client", None)
+        if client is None:
+            self.notify(
+                title="Readwise",
+                message="API client not available.",
+                timeout=5,
+                severity="error",
+            )
+            return
+
         try:
-            # Show a progress indicator during the API call
-            self.app.push_screen(screen="progress")
-
-            # Save to Readwise using the client
-            success, response = self.app.client.save_document(url=link)
-
-            # Remove progress screen
-            self.app.pop_screen()
+            self.notify(title="Readwise", message="Saving link...", timeout=2)
+            success, response = client.save_document(url=link)
 
             if success and response and response.url and response.id:
                 self.notify(
@@ -345,10 +441,6 @@ class LinkSelectionScreen(ModalScreen):
                     severity="error",
                 )
         except Exception as err:
-            # Make sure to remove progress screen if there's an error
-            if isinstance(self.screen, "ProgressScreen"):  # type: ignore
-                self.app.pop_screen()
-
             logger.error(msg=f"Error saving to Readwise: {err}")
             self.notify(
                 title="Readwise",

@@ -2,6 +2,7 @@
 
 import logging
 import webbrowser
+from typing import Any
 
 from textual import on
 from textual.widgets import Markdown, MarkdownViewer
@@ -12,7 +13,7 @@ logger: logging.Logger = logging.getLogger(name=__name__)
 class ArticleViewer(MarkdownViewer):
     """A custom markdown viewer for displaying articles with enhanced functionality."""
 
-    def __init__(self, markdown: str = "", **kwargs) -> None:
+    def __init__(self, markdown: str = "", **kwargs: Any) -> None:
         """Initialize the article viewer.
 
         Args:

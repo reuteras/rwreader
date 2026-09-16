@@ -3,6 +3,7 @@
 from typing import ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
@@ -13,7 +14,7 @@ CONTENT_PREVIEW_LENGTH = 200
 class SaveImprovedScreen(ModalScreen[dict]):
     """Confirmation dialog for saving improved version to Readwise."""
 
-    BINDINGS: ClassVar[list[tuple[str, str, str]]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Cancel"),
         ("enter", "confirm", "Confirm"),
     ]

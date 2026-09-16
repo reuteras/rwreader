@@ -3,7 +3,7 @@
 import logging
 import re
 import webbrowser
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from textual import on
 from textual.binding import Binding
@@ -35,7 +35,7 @@ class LinkableMarkdownViewer(MarkdownViewer):
         ("G", "scroll_end", "Bottom"),
     ]
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize the LinkableMarkdownViewer.
 
         Args:
@@ -136,6 +136,6 @@ class LinkableMarkdownViewer(MarkdownViewer):
                 if hasattr(self.app, "notify"):
                     self.app.notify(message=f"Opening: {event.href}", title="Browser")
             elif hasattr(self.app, "handle_link_click"):
-                self.app.handle_link_click(link=event.href)  # type: ignore
+                self.app.handle_link_click(link=event.href)
             elif hasattr(self.app, "action_open_article_url"):
-                self.app.action_open_article_url()  # type: ignore
+                self.app.action_open_article_url()

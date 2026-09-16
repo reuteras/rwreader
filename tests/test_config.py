@@ -147,9 +147,35 @@ class TestConfiguration:
         assert config.default_theme == "dark"  # Default
         assert config.font_size == "medium"  # Default
         assert config.reading_width == READING_WIDTH_SMALL  # Default
+        assert config.index_enabled is True  # Default
+        assert config.index_path == Path.home() / ".cache" / "rwreader" / "index.db"
+        assert config.download_folder == Path.home() / "Downloads"  # Default
 
     @patch("rwreader.config.metadata.version")
-    def test_configuration_version_flag(self, mock_version: MagicMock, capsys) -> None:
+    def test_configuration_index_and_export_overrides(
+        self, mock_version: MagicMock, tmp_path: Path
+    ) -> None:
+        """Index and export settings are read and tilde-expanded."""
+        mock_version.return_value = "0.1.1"
+
+        config_path = tmp_path / "test_config_paths.toml"
+        config_data = {
+            "readwise": {"token": "tok"},
+            "general": {"index_enabled": False, "index_path": "~/custom/index.db"},
+            "export": {"download_folder": "~/Saved"},
+        }
+        config_path.write_text(tomli_w.dumps(config_data))
+
+        config = Configuration(exec_args=["--config", str(config_path)])
+
+        assert config.index_enabled is False
+        assert config.index_path == Path.home() / "custom" / "index.db"
+        assert config.download_folder == Path.home() / "Saved"
+
+    @patch("rwreader.config.metadata.version")
+    def test_configuration_version_flag(
+        self, mock_version: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Test --version flag."""
         mock_version.return_value = "0.1.1"
 

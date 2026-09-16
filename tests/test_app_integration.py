@@ -1,24 +1,30 @@
 """Integration tests for rwreader TUI application."""
 
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
+from textual.pilot import Pilot
+from textual.widgets import ListView
 
 from rwreader.ui.app import RWReader
 from rwreader.ui.screens.article_list import ArticleListScreen
 from rwreader.ui.screens.article_reader import ArticleReaderScreen
 from rwreader.ui.screens.category_list import CategoryListScreen
+from rwreader.ui.screens.extract_screens import ExtractMenuScreen, IndicatorScreen
 from rwreader.ui.screens.help import HelpScreen
 
-# Constants for category indices
+# Constants for category indices (order as rendered by CategoryListScreen)
 CATEGORY_INDEX_INBOX = 0
-CATEGORY_INDEX_FEED = 1
-CATEGORY_INDEX_LATER = 2
-CATEGORY_INDEX_ARCHIVE = 3
+CATEGORY_INDEX_LATER = 1
+CATEGORY_INDEX_SHORTLIST = 2
+CATEGORY_INDEX_FEED = 3
+CATEGORY_INDEX_ARCHIVE = 4
+_MIN_INDICATORS = 3
 
 
 @pytest.fixture
-def app_with_mock_client(monkeypatch):
+def app_with_mock_client(monkeypatch: pytest.MonkeyPatch) -> RWReader:
     """Create an app instance with mocked API client."""
     # Mock sys.argv to prevent argparse errors
     monkeypatch.setattr("sys.argv", ["rwreader"])
@@ -92,41 +98,69 @@ def app_with_mock_client(monkeypatch):
             "location": "archive",
         },
     ]
+    shortlist_data = [
+        {
+            "id": "6",
+            "title": "Shortlisted Article",
+            "content": "Shortlist content",
+            "url": "https://example.com/6",
+            "word_count": 300,
+            "reading_progress": 0,
+            "location": "shortlist",
+        },
+    ]
 
     # Mock methods that accept refresh and limit parameters
-    def get_inbox_mock(refresh=False, limit=None):
+    def get_inbox_mock(
+        refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         return inbox_data
 
-    def get_feed_mock(refresh=False, limit=None):
+    def get_feed_mock(
+        refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         return feed_data
 
-    def get_later_mock(refresh=False, limit=None):
+    def get_later_mock(
+        refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         return later_data
 
-    def get_archive_mock(refresh=False, limit=None):
+    def get_archive_mock(
+        refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         return archive_data
+
+    def get_shortlist_mock(
+        refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        return shortlist_data
 
     mock_client.get_inbox = Mock(side_effect=get_inbox_mock)
     mock_client.get_feed = Mock(side_effect=get_feed_mock)
     mock_client.get_later = Mock(side_effect=get_later_mock)
+    mock_client.get_shortlist = Mock(side_effect=get_shortlist_mock)
     mock_client.get_archive = Mock(side_effect=get_archive_mock)
     # get_article is called synchronously from run_in_executor, so use Mock not AsyncMock
     mock_client.get_article = Mock(return_value=inbox_data[0])
     mock_client.move_to_archive = Mock(return_value=True)
     mock_client.move_to_later = Mock(return_value=True)
     mock_client.move_to_inbox = Mock(return_value=True)
+    mock_client.move_to_shortlist = Mock(return_value=True)
     mock_client.delete_article = Mock(return_value=True)
+    mock_client.index = None
     mock_client._category_cache = {
         "inbox": {"data": inbox_data, "last_updated": 0},
         "feed": {"data": feed_data, "last_updated": 0},
         "later": {"data": later_data, "last_updated": 0},
+        "shortlist": {"data": shortlist_data, "last_updated": 0},
         "archive": {"data": archive_data, "last_updated": 0},
     }
     mock_client.clear_cache = Mock()
     mock_client.close = Mock()
 
     # Mock create_readwise_client to return our mock client
-    async def mock_create_client(token):
+    async def mock_create_client(token: str) -> Mock:
         return mock_client
 
     # Patch Configuration and create_readwise_client using monkeypatch (persists for test)
@@ -139,7 +173,9 @@ def app_with_mock_client(monkeypatch):
     return app
 
 
-async def navigate_to_article_list(pilot, category="inbox"):
+async def navigate_to_article_list(
+    pilot: Pilot[None], category: str = "inbox"
+) -> ArticleListScreen:
     """Helper: Navigate to ArticleListScreen for a specific category.
 
     Args:
@@ -157,13 +193,14 @@ async def navigate_to_article_list(pilot, category="inbox"):
     # Select the appropriate category
     category_map = {
         "inbox": CATEGORY_INDEX_INBOX,
-        "feed": CATEGORY_INDEX_FEED,
         "later": CATEGORY_INDEX_LATER,
+        "shortlist": CATEGORY_INDEX_SHORTLIST,
+        "feed": CATEGORY_INDEX_FEED,
         "archive": CATEGORY_INDEX_ARCHIVE,
     }
 
     # Get the category list
-    list_view = pilot.app.screen.query_one("#category_list")
+    list_view = pilot.app.screen.query_one("#category_list", ListView)
     list_view.index = category_map.get(category, CATEGORY_INDEX_INBOX)
     await pilot.pause()
 
@@ -180,7 +217,9 @@ async def navigate_to_article_list(pilot, category="inbox"):
     return pilot.app.screen
 
 
-async def navigate_to_article_reader(pilot, category="inbox", article_index=0):
+async def navigate_to_article_reader(
+    pilot: Pilot[None], category: str = "inbox", article_index: int = 0
+) -> ArticleReaderScreen:
     """Helper: Navigate to ArticleReaderScreen for a specific article.
 
     Args:
@@ -195,7 +234,7 @@ async def navigate_to_article_reader(pilot, category="inbox", article_index=0):
     await navigate_to_article_list(pilot, category)
 
     # Select an article
-    list_view = pilot.app.screen.query_one("#article_list")
+    list_view = pilot.app.screen.query_one("#article_list", ListView)
     list_view.index = article_index
     await pilot.pause()
 
@@ -210,7 +249,7 @@ async def navigate_to_article_reader(pilot, category="inbox", article_index=0):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_app_startup(app_with_mock_client):
+async def test_app_startup(app_with_mock_client: RWReader) -> None:
     """Test that app starts successfully."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -220,7 +259,7 @@ async def test_app_startup(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_navigate_between_categories(app_with_mock_client):
+async def test_navigate_between_categories(app_with_mock_client: RWReader) -> None:
     """Test navigating between article categories."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -230,7 +269,7 @@ async def test_navigate_between_categories(app_with_mock_client):
         assert isinstance(app.screen, CategoryListScreen)
 
         # Get the category list
-        list_view = app.screen.query_one("#category_list")
+        list_view = app.screen.query_one("#category_list", ListView)
 
         # Start at Inbox (index 0)
         list_view.index = CATEGORY_INDEX_INBOX
@@ -240,12 +279,17 @@ async def test_navigate_between_categories(app_with_mock_client):
         # Navigate down with j
         await pilot.press("j")
         await pilot.pause()
-        assert list_view.index == CATEGORY_INDEX_FEED
+        assert list_view.index == CATEGORY_INDEX_LATER
 
         # Navigate down with j
         await pilot.press("j")
         await pilot.pause()
-        assert list_view.index == CATEGORY_INDEX_LATER
+        assert list_view.index == CATEGORY_INDEX_SHORTLIST
+
+        # Navigate down with j
+        await pilot.press("j")
+        await pilot.pause()
+        assert list_view.index == CATEGORY_INDEX_FEED
 
         # Navigate down with j
         await pilot.press("j")
@@ -255,19 +299,18 @@ async def test_navigate_between_categories(app_with_mock_client):
         # Navigate back up with k
         await pilot.press("k")
         await pilot.pause()
-        assert list_view.index == CATEGORY_INDEX_LATER
+        assert list_view.index == CATEGORY_INDEX_FEED
 
         # Navigate back to inbox
-        await pilot.press("k")
-        await pilot.pause()
-        await pilot.press("k")
-        await pilot.pause()
+        for _ in range(3):
+            await pilot.press("k")
+            await pilot.pause()
         assert list_view.index == CATEGORY_INDEX_INBOX
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_article_selection_and_viewing(app_with_mock_client):
+async def test_article_selection_and_viewing(app_with_mock_client: RWReader) -> None:
     """Test selecting and viewing an article."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -277,7 +320,7 @@ async def test_article_selection_and_viewing(app_with_mock_client):
         article_list_screen = await navigate_to_article_list(pilot, "inbox")
 
         # Get articles list
-        articles_list = article_list_screen.query_one("#article_list")
+        articles_list = article_list_screen.query_one("#article_list", ListView)
 
         # Should have articles loaded
         assert len(articles_list.children) > 0
@@ -293,7 +336,7 @@ async def test_article_selection_and_viewing(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_keyboard_navigation_j_k(app_with_mock_client):
+async def test_keyboard_navigation_j_k(app_with_mock_client: RWReader) -> None:
     """Test j/k vim-style navigation in article list."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -302,7 +345,7 @@ async def test_keyboard_navigation_j_k(app_with_mock_client):
         # Navigate to ArticleListScreen
         await navigate_to_article_list(pilot, "inbox")
 
-        articles_list = app.screen.query_one("#article_list")
+        articles_list = app.screen.query_one("#article_list", ListView)
 
         # Set initial index
         articles_list.index = 0
@@ -329,7 +372,7 @@ async def test_keyboard_navigation_j_k(app_with_mock_client):
 @pytest.mark.skip(
     reason="Flaky test - populate_list widget recreation causes timeout in test environment"
 )
-async def test_move_article_to_archive(app_with_mock_client):
+async def test_move_article_to_archive(app_with_mock_client: RWReader) -> None:
     """Test moving an article to archive.
 
     NOTE: This test is skipped due to Textual test pilot timeout issues when
@@ -345,11 +388,12 @@ async def test_move_article_to_archive(app_with_mock_client):
         await navigate_to_article_list(pilot, "inbox")
 
         # Select first article
-        articles_list = app.screen.query_one("#article_list")
+        articles_list = app.screen.query_one("#article_list", ListView)
         articles_list.index = 0
         await pilot.pause()
 
         # Manually trigger the action instead of pressing key
+        assert isinstance(app.screen, ArticleListScreen)
         await app.screen.action_archive_article()
         await pilot.pause(0.2)
 
@@ -362,7 +406,7 @@ async def test_move_article_to_archive(app_with_mock_client):
 @pytest.mark.skip(
     reason="Flaky test - populate_list widget recreation causes timeout in test environment"
 )
-async def test_move_article_to_later(app_with_mock_client):
+async def test_move_article_to_later(app_with_mock_client: RWReader) -> None:
     """Test moving an article to later.
 
     NOTE: This test is skipped due to Textual test pilot timeout issues when
@@ -378,11 +422,12 @@ async def test_move_article_to_later(app_with_mock_client):
         await navigate_to_article_list(pilot, "inbox")
 
         # Select first article
-        articles_list = app.screen.query_one("#article_list")
+        articles_list = app.screen.query_one("#article_list", ListView)
         articles_list.index = 0
         await pilot.pause()
 
         # Manually trigger the action instead of pressing key
+        assert isinstance(app.screen, ArticleListScreen)
         await app.screen.action_later_article()
         await pilot.pause(0.2)
 
@@ -392,7 +437,7 @@ async def test_move_article_to_later(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_move_article_to_inbox(app_with_mock_client):
+async def test_move_article_to_inbox(app_with_mock_client: RWReader) -> None:
     """Test moving an article to inbox."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -401,7 +446,7 @@ async def test_move_article_to_inbox(app_with_mock_client):
         # Navigate to Later first
         await navigate_to_article_list(pilot, "later")
 
-        articles_list = app.screen.query_one("#article_list")
+        articles_list = app.screen.query_one("#article_list", ListView)
         if len(articles_list.children) > 0:
             articles_list.index = 0
             await pilot.pause()
@@ -411,12 +456,12 @@ async def test_move_article_to_inbox(app_with_mock_client):
             await pilot.pause()
 
             # Verify API was called
-            app.client.move_to_inbox.assert_called()
+            cast(Mock, app.client).move_to_inbox.assert_called()
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_pane_navigation_with_tab(app_with_mock_client):
+async def test_pane_navigation_with_tab(app_with_mock_client: RWReader) -> None:
     """Test navigating between panes with Tab."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -426,7 +471,7 @@ async def test_pane_navigation_with_tab(app_with_mock_client):
         assert isinstance(app.screen, CategoryListScreen)
 
         # Get the category list widget
-        category_list = app.screen.query_one("#category_list")
+        category_list = app.screen.query_one("#category_list", ListView)
         category_list.focus()
         await pilot.pause()
 
@@ -436,7 +481,7 @@ async def test_pane_navigation_with_tab(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_dark_mode_toggle(app_with_mock_client):
+async def test_dark_mode_toggle(app_with_mock_client: RWReader) -> None:
     """Test toggling dark/light mode."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -461,7 +506,7 @@ async def test_dark_mode_toggle(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_show_help(app_with_mock_client):
+async def test_show_help(app_with_mock_client: RWReader) -> None:
     """Test showing/hiding help screen."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -487,7 +532,7 @@ async def test_show_help(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_refresh_data(app_with_mock_client):
+async def test_refresh_data(app_with_mock_client: RWReader) -> None:
     """Test refreshing data with r shortcut."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -503,7 +548,7 @@ async def test_refresh_data(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_show_metadata(app_with_mock_client):
+async def test_show_metadata(app_with_mock_client: RWReader) -> None:
     """Test showing article metadata."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -519,7 +564,7 @@ async def test_show_metadata(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_open_in_browser(app_with_mock_client):
+async def test_open_in_browser(app_with_mock_client: RWReader) -> None:
     """Test opening article in browser."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -529,7 +574,7 @@ async def test_open_in_browser(app_with_mock_client):
         await navigate_to_article_list(pilot, "inbox")
 
         # Select first article
-        articles_list = app.screen.query_one("#article_list")
+        articles_list = app.screen.query_one("#article_list", ListView)
         articles_list.index = 0
         await pilot.pause()
 
@@ -544,7 +589,7 @@ async def test_open_in_browser(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_clear_content(app_with_mock_client):
+async def test_clear_content(app_with_mock_client: RWReader) -> None:
     """Test going back from ArticleReaderScreen to ArticleListScreen."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -563,7 +608,7 @@ async def test_clear_content(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_next_previous_category(app_with_mock_client):
+async def test_next_previous_category(app_with_mock_client: RWReader) -> None:
     """Test J/K for navigating between categories in CategoryListScreen."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -573,7 +618,7 @@ async def test_next_previous_category(app_with_mock_client):
         assert isinstance(app.screen, CategoryListScreen)
 
         # Get the category list
-        list_view = app.screen.query_one("#category_list")
+        list_view = app.screen.query_one("#category_list", ListView)
 
         # Start at Inbox
         list_view.index = 0
@@ -597,7 +642,7 @@ async def test_next_previous_category(app_with_mock_client):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_multiple_article_interactions(app_with_mock_client):
+async def test_multiple_article_interactions(app_with_mock_client: RWReader) -> None:
     """Test a sequence of typical user interactions."""
     app = app_with_mock_client
     async with app.run_test() as pilot:
@@ -611,7 +656,7 @@ async def test_multiple_article_interactions(app_with_mock_client):
         assert isinstance(app.screen, ArticleListScreen)
 
         # 3. Select first article
-        articles_list = app.screen.query_one("#article_list")
+        articles_list = app.screen.query_one("#article_list", ListView)
         articles_list.index = 0
         await pilot.pause()
 
@@ -631,7 +676,7 @@ async def test_multiple_article_interactions(app_with_mock_client):
         assert isinstance(app.screen, CategoryListScreen)
 
         # 7. Navigate to Later category
-        list_view = app.screen.query_one("#category_list")
+        list_view = app.screen.query_one("#category_list", ListView)
         list_view.index = 2  # Later
         await pilot.pause()
         await pilot.press("enter")
@@ -642,3 +687,47 @@ async def test_multiple_article_interactions(app_with_mock_client):
         await pilot.press("escape")
         await pilot.pause()
         assert isinstance(app.screen, CategoryListScreen)
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_extract_menu_in_reader(app_with_mock_client: RWReader) -> None:
+    """Ctrl+E opens the Extract menu with counts and can open the indicator table."""
+    app = app_with_mock_client
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        cast(Mock, app.client).get_article = Mock(
+            return_value={
+                "id": "1",
+                "title": "Threat report",
+                "url": "https://read.readwise.io/read/1",
+                "source_url": "https://blog.example.com/report",
+                "html_content": (
+                    "<p>C2 at hxxp://evil[.]net/gate and 8[.]8[.]8[.]8, "
+                    'see <a href="https://other.org/ref">ref</a> and '
+                    '<a href="/paper.pdf">paper</a>.</p>'
+                    "<pre><code>echo hi</code></pre>"
+                ),
+                "location": "new",
+            }
+        )
+        reader_screen = await navigate_to_article_reader(pilot, "inbox", 0)
+        assert "evil" in reader_screen.content_markdown
+
+        await pilot.press("ctrl+e")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, ExtractMenuScreen)
+        assert app.screen.counts["links"] >= 1
+        assert app.screen.counts["attachments"] == 1
+        assert app.screen.counts["indicators"] >= _MIN_INDICATORS
+
+        # Move to "Indicators of compromise" (5th entry) and select it
+        await pilot.press("j", "j", "j", "j", "enter")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, IndicatorScreen)
+        values = {i.value for i in app.screen.indicators}
+        assert {"8.8.8.8", "evil.net", "http://evil.net/gate"} <= values
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ArticleReaderScreen)

@@ -4,7 +4,9 @@ import asyncio
 import logging
 import re
 import webbrowser
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import urlparse
 
 from textual import work
 from textual.app import ComposeResult
@@ -12,6 +14,15 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from ...utils.extractors import (
+    ExtractedLink,
+    extract_attachments,
+    extract_code_blocks,
+    extract_indicators,
+    extract_links,
+    extract_references,
+    to_link_tuples,
+)
 from ...utils.highlight_manager import (
     create_reader_highlight,
     find_html_fragment,
@@ -21,6 +32,8 @@ from ...utils.highlight_manager import (
 )
 from ...utils.ui_helpers import format_article_content, move_article_to_destination
 from ..widgets.linkable_markdown_viewer import LinkableMarkdownViewer
+from .extract_screens import CodeBlockScreen, ExtractMenuScreen, IndicatorScreen
+from .link_screens import LinkSelectionScreen
 
 if TYPE_CHECKING:
     pass
@@ -31,16 +44,18 @@ logger = logging.getLogger(__name__)
 class ArticleReaderScreen(Screen):
     """Screen for reading a single article."""
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("J", "next_article", "Next Article", show=True),
         Binding("K", "previous_article", "Previous Article", show=True),
         Binding("a", "archive", "Archive"),
         Binding("l", "later", "Later"),
         Binding("i", "inbox", "Inbox"),
+        Binding("s", "shortlist", "Shortlist"),
         Binding("D", "delete", "Delete"),
         Binding("o", "open_browser", "Open in Browser"),
         Binding("O", "open_source_browser", "Open Source URL"),
         Binding("ctrl+l", "show_links", "Links"),
+        Binding("ctrl+e", "extract", "Extract"),
         Binding("h", "toggle_highlight", "Highlight"),
         Binding("ctrl+j", "cursor_next", "Para ▶", show=False),
         Binding("ctrl+k", "cursor_prev", "◀ Para", show=False),
@@ -113,7 +128,7 @@ class ArticleReaderScreen(Screen):
                 self.notify("API client not available", severity="error")
                 return
 
-            client = self.app.client  # type: ignore
+            client = self.app.client
             article_id = str(self.article.get("id"))
 
             # Show loading status
@@ -426,6 +441,10 @@ class ArticleReaderScreen(Screen):
         """Move this article to Inbox."""
         await self._move_article("inbox")
 
+    async def action_shortlist(self) -> None:
+        """Move this article to Shortlist."""
+        await self._move_article("shortlist")
+
     async def _move_article(self, destination: str) -> None:
         """Move the current article to a destination.
 
@@ -436,7 +455,7 @@ class ArticleReaderScreen(Screen):
             self.notify("API client not available", severity="error")
             return
 
-        client = self.app.client  # type: ignore
+        client = self.app.client
         article_id = str(self.article.get("id"))
 
         success, message = move_article_to_destination(
@@ -488,7 +507,7 @@ class ArticleReaderScreen(Screen):
         if result and result.get("confirmed"):
             try:
                 if hasattr(self.app, "client"):
-                    client = self.app.client  # type: ignore
+                    client = self.app.client
                     client.delete_article(article_id=article_id)
                     self.notify("Article deleted", title="Success")
 
@@ -534,33 +553,137 @@ class ArticleReaderScreen(Screen):
         else:
             self.notify("No source URL available", severity="warning")
 
+    # ── Extraction ────────────────────────────────────────────────────────
+
+    def _own_domains(self) -> list[str]:
+        """Domains belonging to the article itself (Readwise and the source)."""
+        domains: list[str] = []
+        for key in ("url", "source_url"):
+            value = self.article.get(key)
+            if isinstance(value, str) and value:
+                host = urlparse(value).hostname
+                if host:
+                    domains.append(host)
+        return domains
+
+    def _article_links(self) -> list[ExtractedLink]:
+        """Links from the article HTML, falling back to the rendered markdown."""
+        html = self.article.get("html_content") or ""
+        base_url = self.article.get("source_url") or self.article.get("url") or None
+        return extract_links(
+            html=html if isinstance(html, str) else "",
+            markdown=self.content_markdown,
+            base_url=base_url if isinstance(base_url, str) else None,
+            exclude_domains=("readwise.io", "read.readwise.io"),
+        )
+
+    def _push_link_screen(
+        self, links: list[tuple[str, str]], open_links: str, title: str | None = None
+    ) -> None:
+        """Open the link selection modal with the given tuples."""
+        if not hasattr(self.app, "configuration"):
+            self.notify("Configuration not available", severity="error")
+            return
+        self.app.push_screen(
+            LinkSelectionScreen(
+                links=links,
+                configuration=self.app.configuration,
+                open_links=open_links,
+                title=title,
+            )
+        )
+
     async def action_show_links(self) -> None:
         """Show links in the article."""
-        # Extract links from content
-        links = []
-
-        # Extract markdown links [text](url)
-        markdown_pattern = r"\[([^\]]+)\]\(([^)]+)\)"
-        for match in re.finditer(markdown_pattern, self.content_markdown):
-            text = match.group(1).strip()
-            url = match.group(2).strip()
-            links.append((text, url))
-
+        links = to_link_tuples(self._article_links())
         if not links:
             self.notify("No links found in article", title="Info")
             return
+        self._push_link_screen(links, "browser")
 
-        # Show link selection screen
-        from .link_screens import LinkSelectionScreen  # noqa: PLC0415
+    @work
+    async def action_extract(self) -> None:
+        """Open the Extract menu and run the chosen extraction."""
+        if not self.content_markdown:
+            self.notify("Article not loaded yet", title="Extract")
+            return
 
-        if hasattr(self.app, "configuration"):
-            config = self.app.configuration  # type: ignore
-            link_screen = LinkSelectionScreen(
-                links=links, configuration=config, open_links="browser"
-            )
-            self.app.push_screen(link_screen)
-        else:
-            self.notify("Configuration not available", severity="error")
+        html = self.article.get("html_content") or ""
+        html = html if isinstance(html, str) else ""
+        base_url = self.article.get("source_url") or self.article.get("url") or None
+        base_url = base_url if isinstance(base_url, str) else None
+        title = str(self.article.get("title") or "article")
+        config = getattr(self.app, "configuration", None)
+
+        links = self._article_links()
+        attachments = extract_attachments(html=html, links=links, base_url=base_url)
+        code_blocks = extract_code_blocks(self.content_markdown)
+        indicators = extract_indicators(
+            self.content_markdown, exclude_domains=self._own_domains()
+        )
+        references = extract_references(self.content_markdown)
+
+        counts = {
+            "links": len(links),
+            "links_readwise": len(links),
+            "attachments": len(attachments),
+            "code": len(code_blocks),
+            "indicators": len(indicators),
+            "references": len(references),
+        }
+        choice = await self.app.push_screen_wait(ExtractMenuScreen(counts=counts))
+        if not choice:
+            return
+
+        # choice -> (items, label, action to run when items exist)
+        handlers: dict[str, tuple[list[Any], str, Callable[[], object]]] = {
+            "links": (
+                links,
+                "links",
+                lambda: self._push_link_screen(to_link_tuples(links), "browser"),
+            ),
+            "links_readwise": (
+                links,
+                "links",
+                lambda: self._push_link_screen(to_link_tuples(links), "readwise"),
+            ),
+            "attachments": (
+                attachments,
+                "attachments",
+                lambda: self._push_link_screen(to_link_tuples(attachments), "download"),
+            ),
+            "code": (
+                code_blocks,
+                "code blocks",
+                lambda: self.app.push_screen(
+                    CodeBlockScreen(code_blocks, title, config)
+                ),
+            ),
+            "indicators": (
+                indicators,
+                "indicators",
+                lambda: self.app.push_screen(
+                    IndicatorScreen(indicators, title, config)
+                ),
+            ),
+            "references": (
+                references,
+                "references",
+                lambda: self._push_link_screen(
+                    to_link_tuples(references),
+                    "browser",
+                    title="Select a reference to open (ESC to go back, S saves all to Readwise):",
+                ),
+            ),
+        }
+        entry = handlers.get(choice)
+        if entry is None:
+            return
+        items, label, run = entry
+        if not items:
+            self.notify(f"No {label} found in article", title="Extract")
+            return
+        run()
 
     def action_back(self) -> None:
         """Return to article list, passing back the (possibly modified) article list."""

@@ -1,5 +1,6 @@
 """Help screen for rwreader."""
 
+from textual import events
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import MarkdownViewer
@@ -8,7 +9,7 @@ HELP_TEXT = """# Readwise Reader TUI Help
 
 ## Navigation Model
 Readwise Reader TUI uses a single-window, stack-based navigation:
-1. **Category List** → Select a category (Inbox, Later, Feed, Archive)
+1. **Category List** → Select a category (Inbox, Later, Shortlist, Feed, Archive)
 2. **Article List** → Select an article to read
 3. **Article Reader** → Read the article with J/K navigation
 
@@ -26,6 +27,7 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **a**: Move article to Archive
 - **l**: Move article to Later
 - **i**: Move article to Inbox
+- **s**: Move article to Shortlist
 - **D**: Delete article (with confirmation)
 - **o**: Open article in Readwise Reader browser
 - **O**: Open original source URL in browser
@@ -45,14 +47,25 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **a**: Move article to Archive
 - **l**: Move article to Later
 - **i**: Move article to Inbox
+- **s**: Move article to Shortlist
 - **D**: Delete article (with confirmation)
 - **o**: Open article in Readwise Reader browser
 - **O**: Open original source URL in browser
 - **Ctrl+L**: Show links in article
+- **Ctrl+E**: Extract menu (links, attachments, code blocks, indicators, references)
 - **Escape / Backspace**: Back to article list
 - **?**: Show/hide this help
 - **d**: Toggle dark mode
 - **q**: Quit
+
+## Extracting (Ctrl+E in the reader)
+- **Links**: open one in the browser, or save one (or all with **S**) to Readwise
+- **Attachments**: download linked PDFs, media, images and archives to the
+  configured download folder
+- **Code blocks**: copy a fenced block to the clipboard or save it to a file
+- **Indicators of compromise**: IPs, domains, URLs, emails, hashes and CVEs found
+  in the text, with defanged forms restored; copy or export as CSV/JSON
+- **References**: DOIs, arXiv IDs, GitHub repositories and RFCs
 
 ## Highlighting (requires readwise CLI in PATH)
 The current paragraph is shown with a `>` marker on the left.  Use **Ctrl+K / Ctrl+J** to
@@ -63,6 +76,7 @@ and are marked inline with ⟦…⟧.  To remove a highlight, use the Readwise w
 ## Library Categories
 - **📥 Inbox**: Default location for new articles
 - **⏰ Later**: Articles saved for reading later
+- **⭐ Shortlist**: Articles you want to get to first
 - **📰 Feed**: Your RSS feed (unread only)
 - **📦 Archive**: Articles you've finished with
 
@@ -86,7 +100,7 @@ class HelpScreen(Screen):
         """Compose the help screen content."""
         yield MarkdownViewer(markdown=HELP_TEXT, id="help-content")
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         """Handle key presses on the help screen."""
         # Close the help screen on any key press except navigation keys
         if event.key not in ["up", "down", "page_up", "page_down"]:

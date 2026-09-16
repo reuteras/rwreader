@@ -3,6 +3,7 @@
 from collections.abc import Generator
 from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import TextArea
@@ -34,7 +35,7 @@ class FullScreenMarkdown(Screen):
             open_links=False,
         )
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         """Close the full-screen Markdown viewer on any key press except navigation keys.
 
         Args:
@@ -62,7 +63,7 @@ class FullScreenTextArea(Screen):
         """Define the content layout of the full-screen TextArea."""
         yield TextArea.code_editor(text=self.text, language="markdown", read_only=True)
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         """Close the full-screen TextArea on any key press except navigation keys.
 
         Args:

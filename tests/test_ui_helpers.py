@@ -1,9 +1,13 @@
 """Tests for the ui_helpers module."""
 
+from typing import Any
 from unittest.mock import Mock, patch
+
+import pytest
 
 from rwreader.utils.ui_helpers import (
     format_article_content,
+    move_article_to_destination,
     safe_get_article_display_title,
     safe_parse_article_data,
     safe_set_text_style,
@@ -157,6 +161,37 @@ class TestFormatArticleContent:
         }
         result = format_article_content(article)
         assert "Category: Archive" in result
+
+    def test_article_location_label_takes_precedence(self) -> None:
+        """An explicit API location wins over the derived booleans."""
+        article = {
+            "title": "Shortlisted",
+            "content": "Content",
+            "archived": True,
+            "location": "shortlist",
+        }
+        result = format_article_content(article)
+        assert "Category: Shortlist" in result
+
+        article["location"] = "feed"
+        assert "Category: Feed" in format_article_content(article)
+
+    def test_article_tags_in_header(self) -> None:
+        """Tags are listed in the metadata line with markdown escaped."""
+        article = {
+            "title": "Tagged",
+            "content": "Content",
+            "tags": ["security", "c_lang"],
+        }
+        result = format_article_content(article)
+        assert "Tags: security, c\\_lang" in result
+
+    def test_article_without_tags_has_no_tags_line(self) -> None:
+        """Empty or malformed tag values are ignored."""
+        cases: tuple[Any, ...] = ([], None, "notalist")
+        for tags in cases:
+            article = {"title": "T", "content": "Content", "tags": tags}
+            assert "Tags:" not in format_article_content(article)
 
     def test_article_with_alternate_content_fields(self) -> None:
         """Test article with alternate content field names."""
@@ -387,6 +422,45 @@ class TestSanitizeUIInput:
         assert "\r" not in result
         assert "Text" in result
         assert "mixed" in result
+
+
+class TestMoveArticleToDestination:
+    """Test cases for move_article_to_destination."""
+
+    @pytest.mark.parametrize(
+        ("destination", "method"),
+        [
+            ("archive", "move_to_archive"),
+            ("later", "move_to_later"),
+            ("inbox", "move_to_inbox"),
+            ("shortlist", "move_to_shortlist"),
+        ],
+    )
+    def test_dispatches_to_client(self, destination: str, method: str) -> None:
+        """Each destination calls the matching client method."""
+        client = Mock()
+        getattr(client, method).return_value = True
+        success, message = move_article_to_destination(client, "id1", destination)
+        assert success is True
+        assert message == f"Moved to {destination.capitalize()}"
+        getattr(client, method).assert_called_once_with(article_id="id1")
+
+    def test_failure_and_unknown_destination(self) -> None:
+        """Client failures and unknown destinations are reported."""
+        client = Mock()
+        client.move_to_archive.return_value = False
+        assert move_article_to_destination(client, "id1", "archive") == (
+            False,
+            "Failed to move to archive",
+        )
+        success, message = move_article_to_destination(client, "id1", "nowhere")
+        assert success is False
+        assert "Unknown destination" in message
+
+    def test_missing_client(self) -> None:
+        """An object without move methods is rejected."""
+        success, _ = move_article_to_destination(object(), "id1", "archive")
+        assert success is False
 
 
 class TestSafeParseArticleData:

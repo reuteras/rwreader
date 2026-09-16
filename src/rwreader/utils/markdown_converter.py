@@ -82,9 +82,9 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
 
         # Replace images with text descriptions
         for img in soup.find_all(name="img"):
-            if img.get("src"):  # type: ignore
+            if img.get("src"):
                 # Create a text placeholder for images
-                img_alt = img.get("alt", "No description")  # type: ignore
+                img_alt = img.get("alt", "No description")
                 img_placeholder: str = f"[Image: {img_alt}]"
                 img.replace_with(soup.new_string(img_placeholder))
 
@@ -304,7 +304,7 @@ def extract_links(content: str) -> list[tuple[str, str]]:
         # Find all links
         for link in soup.find_all(name="a"):
             try:
-                href: str = str(link.get("href", ""))  # type: ignore
+                href: str = str(link.get("href", ""))
                 if href:
                     text: str = link.get_text().strip()
                     if not text:
@@ -369,13 +369,13 @@ def format_timestamp(timestamp: str | int | float | None) -> str:
                 timestamp_val = timestamp_val / 1000
 
             # Convert from seconds to datetime
-            dt: datetime = datetime.fromtimestamp(timestamp=timestamp_val)
+            dt: datetime = datetime.fromtimestamp(timestamp_val)
         else:
             # Try to parse as ISO format
             dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
 
         # Format based on locale
-        return dt.strftime(format="%c")
+        return dt.strftime("%c")
     except Exception as e:
         logger.error(msg=f"Error formatting timestamp '{timestamp}': {e}")
         return str(object=timestamp) if timestamp else ""

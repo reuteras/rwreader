@@ -114,3 +114,29 @@ Markdown {
     max-width: 120;
     overflow-x: hidden;
 }
+
+/* Extract menu, code block and indicator screens */
+ExtractMenuScreen, CodeBlockScreen, IndicatorScreen {
+    align: center middle;
+}
+
+ExtractMenuScreen #extract-list,
+CodeBlockScreen #extract-list {
+    margin: 1 0;
+    max-height: 20;
+    overflow-y: auto;
+    width: 70%;
+}
+
+CodeBlockScreen #code-preview {
+    width: 70%;
+    max-height: 14;
+    padding: 0 1;
+    background: $surface;
+    color: $text-muted;
+}
+
+IndicatorScreen #indicator-table {
+    width: 90%;
+    max-height: 30;
+}

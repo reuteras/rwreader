@@ -15,10 +15,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _safe_len(data: Any) -> int:
+    """Return len(data) for lists, else 0 (client methods may fail and return odd values)."""
+    return len(data) if isinstance(data, list) else 0
+
+
 class CategoryListScreen(Screen):
     """Screen showing all article categories."""
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select_category", "Select"),
@@ -55,7 +60,7 @@ class CategoryListScreen(Screen):
         logger.debug("CategoryListScreen resumed, refreshing counts")
         # Clear cache and trigger a background refresh to sync with server
         if hasattr(self.app, "client"):
-            self.app.client.clear_cache()  # type: ignore
+            self.app.client.clear_cache()
         self.load_categories(refresh=True, use_retry=False)
 
     def _update_refresh_animation(self) -> None:
@@ -118,7 +123,7 @@ class CategoryListScreen(Screen):
             logger.debug(f"load_categories called with refresh={refresh}")
 
             # Get counts for each category using the client's methods
-            client = self.app.client  # type: ignore
+            client = self.app.client
 
             # Fetch data from API (or cache if not refreshing)
             # Use retry polling when requested to handle server-side caching
@@ -128,37 +133,38 @@ class CategoryListScreen(Screen):
                 inbox_data = client.get_inbox_with_retry()
                 feed_data = client.get_feed_with_retry()
                 later_data = client.get_later_with_retry()
+                shortlist_data = client.get_shortlist_with_retry()
             else:
                 logger.debug("Fetching inbox data...")
                 inbox_data = client.get_inbox(refresh=refresh)
-                logger.debug(f"Got {len(inbox_data)} inbox items")
-
                 logger.debug("Fetching feed data...")
                 feed_data = client.get_feed(refresh=refresh)
-                logger.debug(f"Got {len(feed_data)} feed items")
-
                 logger.debug("Fetching later data...")
                 later_data = client.get_later(refresh=refresh)
-                logger.debug(f"Got {len(later_data)} later items")
+                logger.debug("Fetching shortlist data...")
+                shortlist_data = client.get_shortlist(refresh=refresh)
 
             # Calculate counts
-            inbox_count = len(inbox_data) if inbox_data else 0
+            inbox_count = _safe_len(inbox_data)
             # For feed, only count unread articles
             feed_count = (
                 len([a for a in feed_data if a.get("first_opened_at") == ""])
-                if feed_data
+                if isinstance(feed_data, list)
                 else 0
             )
-            later_count = len(later_data) if later_data else 0
+            later_count = _safe_len(later_data)
+            shortlist_count = _safe_len(shortlist_data)
 
             logger.debug(
-                f"Calculated counts: inbox={inbox_count}, feed={feed_count}, later={later_count}"
+                f"Calculated counts: inbox={inbox_count}, feed={feed_count}, "
+                f"later={later_count}, shortlist={shortlist_count}"
             )
 
             self.categories = {
                 "inbox": inbox_count,
-                "feed": feed_count,
                 "later": later_count,
+                "shortlist": shortlist_count,
+                "feed": feed_count,
                 "archive": -1,  # Archive doesn't show count
             }
 
@@ -204,6 +210,7 @@ class CategoryListScreen(Screen):
             categories = [
                 ("inbox", "📥", "Inbox"),
                 ("later", "⏰", "Later"),
+                ("shortlist", "⭐", "Shortlist"),
                 ("feed", "📰", "Feed"),
                 ("archive", "📦", "Archive"),
             ]
@@ -219,7 +226,7 @@ class CategoryListScreen(Screen):
                 logger.debug(f"Creating item for {category_id}: {display_text}")
                 # Don't set explicit ID - let Textual auto-generate to avoid duplicate ID issues
                 item = ListItem(Static(display_text, markup=False))
-                item.data = {"category": category_id}  # type: ignore
+                item.data = {"category": category_id}  # type: ignore[attr-defined]
                 list_view.append(item)
                 logger.debug(f"Appended item {category_id}")
 
@@ -256,7 +263,7 @@ class CategoryListScreen(Screen):
         """Handle ListView item selection (Enter key)."""
         # Get the selected item's data
         if event.item and hasattr(event.item, "data") and event.item.data:
-            category = event.item.data.get("category")  # type: ignore
+            category = event.item.data.get("category")
             if category:
                 # Import and push ArticleListScreen
                 from .article_list import ArticleListScreen  # noqa: PLC0415
@@ -275,7 +282,7 @@ class CategoryListScreen(Screen):
                 hasattr(list_view.highlighted_child, "data")
                 and list_view.highlighted_child.data
             ):
-                category = list_view.highlighted_child.data.get("category")  # type: ignore
+                category = list_view.highlighted_child.data.get("category")
                 if category:
                     # Import and push ArticleListScreen
                     from .article_list import ArticleListScreen  # noqa: PLC0415
@@ -292,7 +299,7 @@ class CategoryListScreen(Screen):
         # Clear the client cache and reload (don't clear the list - let refresh happen in background)
         if hasattr(self.app, "client"):
             logger.debug("Clearing client cache")
-            self.app.client.clear_cache()  # type: ignore
+            self.app.client.clear_cache()
 
         # Load fresh data from API (will show animation in title)
         logger.debug("Calling load_categories with refresh=True")

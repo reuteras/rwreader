@@ -18,6 +18,10 @@ DEFAULT_CONFIG = """[general]
 cache_size = 10000
 # Default theme (dark or light)
 default_theme = "dark"
+# Local SQLite index of document metadata used by overview screens.
+# Set index_enabled = false to disable it entirely.
+index_enabled = true
+# index_path = "~/.cache/rwreader/index.db"
 
 [readwise]
 # Readwise API token - can use op command for 1Password integration
@@ -27,6 +31,10 @@ token = "your_readwise_token"  # Or use 1Password CLI integration
 # Display settings
 font_size = "medium"  # small, medium, large
 reading_width = 80    # characters
+
+[export]
+# Where files downloaded from article links are stored
+download_folder = "~/Downloads"
 
 [html_redownload]
 # HTML redownload feature settings
@@ -203,6 +211,18 @@ class Configuration:
             general_config = self.config.get("general", {})
             self.cache_size: int = general_config.get("cache_size", 10000)
             self.default_theme: str = general_config.get("default_theme", "dark")
+            self.index_enabled: bool = bool(general_config.get("index_enabled", True))
+            self.index_path: Path = Path(
+                general_config.get(
+                    "index_path", Path.home() / ".cache" / "rwreader" / "index.db"
+                )
+            ).expanduser()
+
+            # Get export settings
+            export_config = self.config.get("export", {})
+            self.download_folder: Path = Path(
+                export_config.get("download_folder", Path.home() / "Downloads")
+            ).expanduser()
 
             # Get display settings
             display_config = self.config.get("display", {})

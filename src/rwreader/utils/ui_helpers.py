@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Literal
+from typing import Any
 
 from ..utils.markdown_converter import (
     escape_markdown_formatting,
@@ -31,6 +31,13 @@ _PLAIN_CONTENT_FIELDS: list[str] = [
 ]
 _EXCLUDED_FIELDS: set[str] = {"id", "title", "url", "author", "site_name"}
 _MIN_CONTENT_LENGTH = 100
+_LOCATION_LABELS: dict[str, str] = {
+    "new": "Inbox",
+    "later": "Later",
+    "shortlist": "Shortlist",
+    "feed": "Feed",
+    "archive": "Archive",
+}
 
 
 def _extract_article_content(
@@ -211,11 +218,17 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         updated_at: str = format_timestamp(article.get("updated_at", ""))
         word_count: str | int = article.get("word_count", 0)
 
-        # Determine category
-        category: Literal["Archive"] | Literal["Later"] | Literal["Inbox"] = (
-            "Archive"
-            if article.get("archived", True)
-            else ("Later" if article.get("saved_for_later", False) else "Inbox")
+        # Determine location label; prefer the explicit API location when present
+        category: str = _LOCATION_LABELS.get(str(article.get("location") or ""), "")
+        if not category:
+            category = (
+                "Archive"
+                if article.get("archived", True)
+                else ("Later" if article.get("saved_for_later", False) else "Inbox")
+            )
+        tags = article.get("tags")
+        tag_list: list[str] = (
+            [str(t) for t in tags if t] if isinstance(tags, list | tuple) else []
         )
 
         # Format markdown content
@@ -236,6 +249,9 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         if word_count and isinstance(word_count, int | float):
             metadata.append(f"*{word_count} words*")
         metadata.append(f"*Category: {category}*")
+        if tag_list:
+            escaped_tags = ", ".join(escape_markdown_formatting(t) for t in tag_list)
+            metadata.append(f"*Tags: {escaped_tags}*")
 
         if metadata:
             header += " | ".join(metadata) + "\n\n"
@@ -409,6 +425,8 @@ def move_article_to_destination(
             success = client.move_to_later(article_id=article_id)
         elif destination == "inbox":
             success = client.move_to_inbox(article_id=article_id)
+        elif destination == "shortlist":
+            success = client.move_to_shortlist(article_id=article_id)
         else:
             return False, f"Unknown destination: {destination}"
 

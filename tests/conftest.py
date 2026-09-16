@@ -1,7 +1,9 @@
 """Shared pytest fixtures for rwreader tests."""
 
 import logging
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -16,7 +18,7 @@ def temp_config_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def clean_environment(monkeypatch):
+def clean_environment(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     """Provide a clean environment without Readwise token."""
     # Remove any existing READWISE_TOKEN from environment
     monkeypatch.delenv("READWISE_TOKEN", raising=False)
@@ -25,7 +27,7 @@ def clean_environment(monkeypatch):
 
 
 @pytest.fixture
-def mock_readwise_document():
+def mock_readwise_document() -> Mock:
     """Create a mock Readwise Document object with all required fields."""
     doc = Mock()
     doc.id = "test_doc_id"
@@ -48,7 +50,7 @@ def mock_readwise_document():
 
 
 @pytest.fixture
-def sample_article_dict():
+def sample_article_dict() -> dict[str, Any]:
     """Create a sample article dictionary."""
     return {
         "id": "article_123",
@@ -74,7 +76,7 @@ def sample_article_dict():
 
 
 @pytest.fixture
-def sample_config_data():
+def sample_config_data() -> dict[str, Any]:
     """Create sample configuration data."""
     return {
         "general": {"cache_size": 10000, "default_theme": "dark"},
@@ -84,7 +86,7 @@ def sample_config_data():
 
 
 @pytest.fixture(autouse=True)
-def reset_logging():
+def reset_logging() -> Generator[None, None, None]:
     """Reset logging configuration before each test."""
     # Get the root logger
     logger = logging.getLogger()

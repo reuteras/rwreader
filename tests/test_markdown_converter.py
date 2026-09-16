@@ -170,7 +170,7 @@ class TestFormatTimestamp:
 
     def test_format_none_timestamp(self) -> None:
         """Test formatting None timestamp."""
-        result = format_timestamp(None)  # type: ignore
+        result = format_timestamp(None)
         assert result == ""
 
     def test_format_invalid_timestamp(self) -> None:

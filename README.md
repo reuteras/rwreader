@@ -5,10 +5,12 @@ A modern, keyboard-driven terminal user interface (TUI) for [Readwise Reader](ht
 ## Features
 
 - **Browse Library**: Navigate your entire Readwise Reader library with smooth keyboard controls
-- **Multiple Views**: Organize articles by Inbox, Later, Feed, and Archive categories
+- **Multiple Views**: Organize articles by Inbox, Later, Shortlist, Feed, and Archive categories
+- **Local Index**: A small SQLite index of document metadata (tags, categories, sites, word counts) kept in sync as you browse
 - **Read Articles**: Display formatted article content with syntax highlighting
 - **Vim-style Navigation**: Use j/k for navigation, with arrow keys as fallback
 - **Link Management**: Extract, save, and share article links to Readwise
+- **Extract Menu**: Pull links, attachments, code blocks, indicators of compromise and references out of an article
 - **1Password Integration**: Securely store and retrieve your Readwise API token via 1Password CLI
 - **Dark/Light Themes**: Toggle between dark and light mode on the fly
 - **Progressive Loading**: Efficient loading with "Load More" functionality
@@ -64,6 +66,9 @@ rwreader
 [general]
 # Size of the local cache in bytes (default: 10000)
 cache_size = 10000
+# Local SQLite index of document metadata (default: enabled)
+index_enabled = true
+# index_path = "~/.cache/rwreader/index.db"
 
 [readwise]
 # Your Readwise Reader API token
@@ -79,6 +84,10 @@ font_size = "medium"
 
 # Content width in characters (default: 80)
 reading_width = 80
+
+[export]
+# Where files downloaded from article links are stored (default: ~/Downloads)
+download_folder = "~/Downloads"
 ```
 
 ### 1Password CLI Integration
@@ -135,19 +144,18 @@ rwreader
 | `a` | Move to Archive       |
 | `l` | Move to Later         |
 | `i` | Move to Inbox         |
+| `s` | Move to Shortlist     |
 | `o` | Open in browser       |
 | `m` | Show metadata         |
 | `M` | Maximize content pane |
 | `D` | Delete article        |
 
-### Link Management
+### Link Management and Extraction
 
-| Key            | Action                                    |
-|----------------|-------------------------------------------|
-| `Ctrl+O`       | Open article links (choose which to open) |
-| `Ctrl+S`       | Save link (download)                      |
-| `Ctrl+L`       | Add link to Readwise                      |
-| `Ctrl+Shift+L` | Add link to Readwise and open             |
+| Key      | Action                                                          |
+|----------|-----------------------------------------------------------------|
+| `Ctrl+L` | Show article links (Enter opens, `S` saves all to Readwise)   |
+| `Ctrl+E` | Extract menu: links, attachments, code blocks, IOCs, references |
 
 ### App Controls
 

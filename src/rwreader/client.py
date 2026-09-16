@@ -21,10 +21,26 @@ from .exceptions import (
     ReadwiseRateLimitError,
     ReadwiseServerError,
 )
+from .index import DocumentIndex, tag_names
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
 _MAX_ARTICLE_ID_LENGTH = 100
+
+# Reader locations as used by the v3 API, keyed by the app's category names.
+LOCATIONS: dict[str, str] = {
+    "inbox": "new",
+    "later": "later",
+    "shortlist": "shortlist",
+    "feed": "feed",
+    "archive": "archive",
+}
+
+
+def _str_attr(document: Any, name: str) -> str:
+    """Return a string attribute of a document, or empty string if absent/non-string."""
+    value = getattr(document, name, None)
+    return value if isinstance(value, str) else ""
 
 
 def _handle_api_error(error: Exception, article_id: str) -> None:
@@ -87,15 +103,19 @@ async def create_readwise_client(token: str) -> "ReadwiseClient":
 class ReadwiseClient:
     """Client for interacting with the Readwise Reader API with efficient caching."""
 
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, index: DocumentIndex | None = None) -> None:
         """Initialize the Readwise Reader client.
 
         Args:
             token: Readwise API token
-            cache_size: Maximum number of items to store in cache
+            index: Optional local metadata index that fetched documents are
+                written into as a side effect of every API call.
         """
         # Store token for API calls
         self.token: str = token
+
+        # Optional local metadata index (see rwreader.index)
+        self.index: DocumentIndex | None = index
 
         # Set token environment variable (required by readwise-api)
         os.environ["READWISE_TOKEN"] = token
@@ -105,6 +125,7 @@ class ReadwiseClient:
             "inbox": {"data": [], "last_updated": 0, "complete": False},
             "feed": {"data": [], "last_updated": 0, "complete": False},
             "later": {"data": [], "last_updated": 0, "complete": False},
+            "shortlist": {"data": [], "last_updated": 0, "complete": False},
             "archive": {
                 "data": [],
                 "last_updated": 0,
@@ -218,6 +239,98 @@ class ReadwiseClient:
             cache_key="later", api_location="later", limit=limit
         )
 
+    def get_shortlist(
+        self, refresh: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get articles in the Shortlist.
+
+        Args:
+            refresh: Force refresh even if cached data exists
+            limit: Maximum number of items to return
+
+        Returns:
+            List of shortlisted articles in dict format
+        """
+        return self._get_category(
+            cache_key="shortlist",
+            api_location="shortlist",
+            refresh=refresh,
+            limit=limit,
+        )
+
+    def get_shortlist_with_retry(
+        self, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Get shortlist articles with retry polling to handle server-side caching.
+
+        Args:
+            limit: Maximum number of items to return
+
+        Returns:
+            List of shortlisted articles in dict format
+        """
+        return self._get_category_with_retry(
+            cache_key="shortlist", api_location="shortlist", limit=limit
+        )
+
+    def _index_articles(self, articles: list[dict[str, Any]]) -> None:
+        """Write fetched article metadata into the local index, if enabled."""
+        if self.index is None or not articles:
+            return
+        try:
+            self.index.upsert_many(articles)
+        except Exception as e:
+            logger.warning(f"Failed to update local index: {e}")
+
+    def _index_set_location(self, article_id: str, location: str) -> None:
+        """Record a move in the local index, if enabled."""
+        if self.index is None:
+            return
+        try:
+            self.index.set_location(article_id, location)
+        except Exception as e:
+            logger.warning(f"Failed to update location in local index: {e}")
+
+    def sync_index(self, full: bool = False) -> int:
+        """Refresh the local index from the API.
+
+        Fetches every document updated since the last sync (or everything when
+        ``full`` is True or no sync has happened yet) and writes the metadata
+        into the index. A full sync also removes documents that no longer exist
+        remotely.
+
+        Args:
+            full: Ignore the last sync time and re-fetch everything.
+
+        Returns:
+            Number of documents written to the index. Zero if no index is set.
+        """
+        if self.index is None:
+            return 0
+
+        updated_after: datetime.datetime | None = None
+        if not full:
+            updated_after = self.index.last_sync
+
+        started = datetime.datetime.now(tz=datetime.UTC)
+        try:
+            documents: list[Document] = self._api.get_documents(
+                updated_after=updated_after
+            )
+        except Exception as e:
+            logger.error(f"Index sync failed: {e}")
+            raise
+
+        articles = [self._convert_document_to_dict(document=doc) for doc in documents]
+        written = self.index.upsert_many(articles)
+        if full or updated_after is None:
+            removed = self.index.prune_except(a["id"] for a in articles)
+            if removed:
+                logger.info(f"Index sync removed {removed} stale documents")
+        self.index.mark_synced(started)
+        logger.info(f"Index sync wrote {written} documents (full={full})")
+        return written
+
     def get_archive(
         self, refresh: bool = False, limit: int | None = None, timeframe: str = "month"
     ) -> list[dict[str, Any]]:
@@ -272,6 +385,8 @@ class ReadwiseClient:
                 # Update the article cache
                 for article in articles:
                     self._article_cache[article["id"]] = article
+
+                self._index_articles(articles)
 
                 return articles[:limit] if limit else articles
 
@@ -427,6 +542,8 @@ class ReadwiseClient:
                     cache["last_updated"] = current_time
                     cache["complete"] = True
 
+                self._index_articles(articles)
+
                 logger.debug(
                     f"Returning {len(articles)} articles for {cache_key} (limit={limit})"
                 )
@@ -488,6 +605,7 @@ class ReadwiseClient:
             Article data in dict format
         """
         try:
+            location = document.location if isinstance(document.location, str) else ""
             # Convert document attributes to our dictionary format
             article_dict: dict[str, Any] = {
                 "id": document.id,
@@ -504,8 +622,18 @@ class ReadwiseClient:
                 "source_url": document.source_url or "",
                 "first_opened_at": document.first_opened_at or "",
                 "last_opened_at": document.last_opened_at or "",
-                "archived": document.location == "archive",
-                "saved_for_later": document.location == "later",
+                # Fields the API returns but the app previously dropped
+                "location": location,
+                "category": _str_attr(document, "category"),
+                "tags": tag_names(getattr(document, "tags", None)),
+                "notes": _str_attr(document, "notes"),
+                "image_url": _str_attr(document, "image_url"),
+                "saved_at": _str_attr(document, "saved_at"),
+                "last_moved_at": _str_attr(document, "last_moved_at"),
+                "parent_id": _str_attr(document, "parent_id"),
+                "source": _str_attr(document, "source"),
+                "archived": location == "archive",
+                "saved_for_later": location == "later",
                 # Add additional fields for compatibility with the existing code
                 "read": document.reading_progress >= 95  # noqa: PLR2004
                 if document.reading_progress
@@ -736,7 +864,9 @@ class ReadwiseClient:
                     if article_id in self._article_cache:
                         self._article_cache[article_id]["archived"] = False
                         self._article_cache[article_id]["saved_for_later"] = False
+                        self._article_cache[article_id]["location"] = "new"
 
+                self._index_set_location(article_id, "new")
                 self._invalidate_cache()
                 logger.debug("Cache invalidated after move to inbox")
                 return True
@@ -771,7 +901,9 @@ class ReadwiseClient:
                     if article_id in self._article_cache:
                         self._article_cache[article_id]["archived"] = False
                         self._article_cache[article_id]["saved_for_later"] = True
+                        self._article_cache[article_id]["location"] = "later"
 
+                self._index_set_location(article_id, "later")
                 self._invalidate_cache()
                 return True
             else:
@@ -807,7 +939,9 @@ class ReadwiseClient:
                     if article_id in self._article_cache:
                         self._article_cache[article_id]["archived"] = True
                         self._article_cache[article_id]["saved_for_later"] = False
+                        self._article_cache[article_id]["location"] = "archive"
 
+                self._index_set_location(article_id, "archive")
                 self._invalidate_cache()
                 logger.debug("Cache invalidated after move to archive")
                 return True
@@ -819,6 +953,47 @@ class ReadwiseClient:
 
         except Exception as e:
             logger.error(msg=f"Error moving article {article_id} to archive: {e}")
+            return False
+
+    def move_to_shortlist(self, article_id: str) -> bool:
+        """Move article to the Shortlist.
+
+        The readwise-api package only accepts new/later/archive when updating a
+        location, so this calls the v3 update endpoint directly.
+
+        Args:
+            article_id: ID of the article to move
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Moving article {article_id} to shortlist")
+            http_response: requests.Response = requests.patch(
+                url=f"{self._api.URL_BASE}/update/{article_id}/",
+                headers={"Authorization": f"Token {self.token}"},
+                json={"location": "shortlist"},
+                timeout=self._timeout,
+            )
+            if http_response.status_code not in (HTTPStatus.OK, HTTPStatus.CREATED):
+                logger.error(
+                    msg=f"Failed to move article {article_id} to shortlist "
+                    f"(status {http_response.status_code}): {http_response.text[:200]}"
+                )
+                return False
+
+            with self._cache_lock:
+                if article_id in self._article_cache:
+                    self._article_cache[article_id]["archived"] = False
+                    self._article_cache[article_id]["saved_for_later"] = False
+                    self._article_cache[article_id]["location"] = "shortlist"
+
+            self._index_set_location(article_id, "shortlist")
+            self._invalidate_cache()
+            return True
+
+        except Exception as e:
+            logger.error(msg=f"Error moving article {article_id} to shortlist: {e}")
             return False
 
     def delete_article(self, article_id: str) -> bool:
@@ -834,8 +1009,11 @@ class ReadwiseClient:
             # Call the delete_document function
             readwise.delete_document(document_id=article_id)
 
-            # if article_id in self._article_cache:
-            #    del self._article_cache[article_id]
+            if self.index is not None:
+                try:
+                    self.index.delete(article_id)
+                except Exception as e:
+                    logger.warning(f"Failed to remove {article_id} from index: {e}")
             return True
 
         except Exception as e:
@@ -877,15 +1055,17 @@ class ReadwiseClient:
         # For other categories, just force a refresh
         self._invalidate_cache_for_category(category)
 
-        if category == "inbox":
-            return self.get_inbox(refresh=True)
-        elif category == "feed":
-            return self.get_feed(refresh=True)
-        elif category == "later":
-            return self.get_later(refresh=True)
-        else:
+        fetchers = {
+            "inbox": self.get_inbox,
+            "feed": self.get_feed,
+            "later": self.get_later,
+            "shortlist": self.get_shortlist,
+        }
+        fetcher = fetchers.get(category)
+        if fetcher is None:
             logger.error(msg=f"Unknown category: {category}")
             return []
+        return fetcher(refresh=True)
 
     def _invalidate_cache_for_category(self, category: str) -> None:
         """Invalidate cache for a specific category.
@@ -1084,3 +1264,5 @@ class ReadwiseClient:
             self._executor.shutdown(wait=False)
         except Exception as e:
             logger.error(msg=f"Error shutting down executor: {e}")
+        if self.index is not None:
+            self.index.close()

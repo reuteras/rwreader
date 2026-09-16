@@ -2,22 +2,18 @@
 
 import logging
 import sys
-from pathlib import PurePath
-from typing import ClassVar, Final
+from pathlib import Path, PurePath
+from typing import ClassVar
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.screen import Screen
 from textual.widgets import Footer, Header
 
 # Import our improved client
 from ..client import ReadwiseClient, create_readwise_client
 from ..config import Configuration
-from .screens.confirm import DeleteArticleScreen
-from .screens.fullscreen import FullScreenMarkdown
+from ..index import DocumentIndex
 from .screens.help import HelpScreen
-from .screens.link_screens import LinkSelectionScreen
-from .screens.save_improved import SaveImprovedScreen
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -32,15 +28,7 @@ class RWReader(App[None]):
         ("q", "quit", "Quit"),
     ]
 
-    SCREENS: ClassVar[dict[str, type[Screen]]] = {
-        "delete_article": DeleteArticleScreen,
-        "maximize_content": FullScreenMarkdown,
-        "help": HelpScreen,
-        "open_links": LinkSelectionScreen,
-        "save_improved": SaveImprovedScreen,
-    }
-
-    CSS_PATH: Final[list[str | PurePath]] = ["styles.tcss"]
+    CSS_PATH: ClassVar[list[str | PurePath]] = ["styles.tcss"]
 
     def __init__(self) -> None:
         """Initialize the app and connect to Readwise API."""
@@ -62,6 +50,16 @@ class RWReader(App[None]):
         self.client: ReadwiseClient = await create_readwise_client(
             token=self.configuration.token
         )
+
+        # Attach the local metadata index if enabled and configured
+        index_path = getattr(self.configuration, "index_path", None)
+        if getattr(self.configuration, "index_enabled", False) is True and isinstance(
+            index_path, str | PurePath
+        ):
+            try:
+                self.client.index = DocumentIndex(Path(index_path))
+            except Exception as e:
+                logger.error(f"Could not open local index at {index_path}: {e}")
 
         # Load initial data into cache (non-blocking)
         try:

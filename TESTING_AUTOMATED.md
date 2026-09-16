@@ -2,14 +2,14 @@
 
 ## Overview
 
-RWReader has **198 automated tests** covering critical functionality. Tests use pytest and run automatically on every PR via GitHub Actions.
+RWReader has **292 automated tests** covering critical functionality. Tests use pytest and run automatically on every PR via GitHub Actions.
 
 ## Test Statistics
 
-- **Total Tests**: 198 (182 unit + 16 integration, of which 2 integration tests are skipped)
-- **Test Files**: 9
-- **Lines of Test Code**: ~2,800
-- **Current Coverage**: 17% overall (40% when running only the fast/non-integration suite; target: 50%+)
+- **Total Tests**: 292 (275 unit + 17 integration, of which 2 integration tests are skipped)
+- **Test Files**: 12
+- **Lines of Test Code**: ~4,100
+- **Current Coverage**: 62% overall (54% when running only the fast/non-integration suite; target: 70%+)
 
 ## Running Tests
 
@@ -66,15 +66,18 @@ See `.github/workflows/tests.yml` for configuration. Note that integration tests
 ```text
 tests/
 ├── conftest.py                    # Shared fixtures
-├── test_client.py                 # API client tests (24 tests)
-├── test_config.py                 # Configuration tests (15 tests)
+├── test_client.py                 # API client tests (35 tests)
+├── test_config.py                 # Configuration tests (16 tests)
 ├── test_cache.py                  # Caching logic tests (12 tests)
+├── test_index.py                  # Local SQLite index tests (24 tests)
+├── test_extractors.py             # Link/attachment/code/IOC/reference extraction (39 tests)
+├── test_extract_screens.py        # Extract menu, code block and indicator screens (9 tests)
 ├── test_markdown_converter.py     # Markdown processing tests (25 tests)
 ├── test_highlight_manager.py      # Highlight extraction/formatting tests (24 tests)
 ├── test_article_reader.py         # Article reader screen tests (9 tests)
-├── test_ui_helpers.py             # UI utility tests (47 tests)
+├── test_ui_helpers.py             # UI utility tests (56 tests)
 ├── test_exceptions.py             # Error handling tests (26 tests)
-└── test_app_integration.py        # End-to-end integration tests (16 tests, Textual Pilot)
+└── test_app_integration.py        # End-to-end integration tests (17 tests, Textual Pilot)
 ```
 
 ## Coverage by Module
@@ -261,7 +264,7 @@ uv run pytest -k "cache"
 
 ## Known Issues
 
-All 198 tests currently pass (182 unit + 14 integration), with 2 integration tests skipped.
+All 292 tests currently pass (275 unit + 15 integration), with 2 integration tests skipped.
 
 ### Skipped Tests
 

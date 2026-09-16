@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Shortlist as a fifth location: browse it from the category list and move
+  articles there with `s` from the article list or reader
+- Local SQLite index of document metadata at `~/.cache/rwreader/index.db`,
+  updated as you browse and via an incremental sync; configurable through
+  `[general] index_enabled` and `index_path`
+- Document tags, category, notes, image URL, saved/moved timestamps and parent
+  ID are now kept when converting API documents; tags are shown in the reader
+  header
+- `[export] download_folder` setting for link downloads
+- Extract menu in the reader (`Ctrl+E`): links (HTML-aware, deduplicated,
+  tracking parameters stripped), attachments to download, code blocks to copy
+  or save, indicators of compromise (IPv4/IPv6, domains, URLs, emails, hashes,
+  CVEs; defanged forms restored; copy or export as CSV/JSON) and references
+  (DOI, arXiv, GitHub, RFC)
+- `S` in any link list saves every listed link to Readwise after confirmation
+
+### Fixed
+
+- Downloading a link would fail because the download folder was never read
+  from configuration; downloads now run in the background and never overwrite
+  existing files
+- Saving a link to Readwise from the link list pushed a screen that did not
+  exist and could never succeed
+
 ## [0.1.1] - 2024-01-XX
 
 ### Added

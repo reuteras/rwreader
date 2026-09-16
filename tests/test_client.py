@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from rwreader.client import ReadwiseClient, create_readwise_client
+from rwreader.index import DocumentIndex
 
 # Test constants
 CACHE_EXPIRY_SECONDS = 3600
@@ -132,6 +133,33 @@ class TestReadwiseClient:
             mock_api.get_documents.assert_called_once_with(location="later")
 
     @patch("rwreader.client.ReadwiseReader")
+    def test_get_shortlist(self, mock_api_class: Mock, mock_document: Mock) -> None:
+        """Test getting shortlist articles."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api = mock_api_class.return_value
+            mock_api.get_documents.return_value = [mock_document]
+
+            client = ReadwiseClient(token="test_token")
+            articles = client.get_shortlist()
+
+            assert len(articles) == 1
+            mock_api.get_documents.assert_called_with(location="shortlist")
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_get_more_articles_shortlist_and_unknown(
+        self, mock_api_class: Mock, mock_document: Mock
+    ) -> None:
+        """Load-more refreshes the shortlist and rejects unknown categories."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api = mock_api_class.return_value
+            mock_api.get_documents.return_value = [mock_document]
+
+            client = ReadwiseClient(token="test_token")
+            assert len(client.get_more_articles("shortlist")) == 1
+            mock_api.get_documents.assert_called_with(location="shortlist")
+            assert client.get_more_articles("bogus") == []
+
+    @patch("rwreader.client.ReadwiseReader")
     def test_get_archive(self, mock_api_class: Mock, mock_document: Mock) -> None:
         """Test getting archive articles."""
         with patch.dict("os.environ", {}, clear=True):
@@ -227,6 +255,67 @@ class TestReadwiseClient:
             assert article_dict["author"] == "Test Author"
             assert article_dict["archived"] is False
             assert article_dict["saved_for_later"] is False
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_convert_document_to_dict_extra_fields(self, mock_api: Mock) -> None:
+        """Location, category, tags, notes and timestamps are preserved."""
+        with patch.dict("os.environ", {}, clear=True):
+            doc = Mock()
+            doc.id = "doc_x"
+            doc.title = "Tagged"
+            doc.url = "https://example.com"
+            doc.author = ""
+            doc.site_name = ""
+            doc.word_count = 10
+            doc.created_at = ""
+            doc.updated_at = ""
+            doc.published_date = ""
+            doc.summary = ""
+            doc.content = ""
+            doc.source_url = ""
+            doc.first_opened_at = ""
+            doc.last_opened_at = ""
+            doc.location = "shortlist"
+            doc.reading_progress = 0
+            doc.category = "pdf"
+            sec_tag = Mock()
+            sec_tag.name = "sec"
+            doc.tags = {"sec": sec_tag, "go": {}}
+            doc.notes = "a note"
+            doc.image_url = "https://example.com/img.png"
+            doc.saved_at = "2024-03-01T00:00:00Z"
+            doc.last_moved_at = "2024-03-02T00:00:00Z"
+            doc.parent_id = "parent"
+            doc.source = "reader-web"
+
+            client = ReadwiseClient(token="test_token")
+            article = client._convert_document_to_dict(doc)
+
+            assert article["location"] == "shortlist"
+            assert article["category"] == "pdf"
+            assert article["tags"] == ["go", "sec"]
+            assert article["notes"] == "a note"
+            assert article["image_url"] == "https://example.com/img.png"
+            assert article["saved_at"] == "2024-03-01T00:00:00Z"
+            assert article["last_moved_at"] == "2024-03-02T00:00:00Z"
+            assert article["parent_id"] == "parent"
+            assert article["source"] == "reader-web"
+            assert article["archived"] is False
+            assert article["saved_for_later"] is False
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_convert_document_to_dict_tolerates_missing_extras(
+        self, mock_api: Mock, mock_document: Mock
+    ) -> None:
+        """Documents without the newer attributes still convert cleanly."""
+        with patch.dict("os.environ", {}, clear=True):
+            client = ReadwiseClient(token="test_token")
+            article = client._convert_document_to_dict(mock_document)
+            # Mock() returns Mock objects for unknown attributes; they must not leak
+            assert article["category"] == ""
+            assert article["tags"] == []
+            assert article["notes"] == ""
+            assert article["location"] == "new"
 
     @patch("rwreader.client.ReadwiseReader")
     def test_convert_document_to_dict_archived(self, mock_api: Mock) -> None:
@@ -356,6 +445,40 @@ class TestReadwiseClient:
                 document_id="article_123", location="archive"
             )
 
+    @patch("rwreader.client.requests.patch")
+    @patch("rwreader.client.ReadwiseReader")
+    def test_move_to_shortlist(self, mock_api: Mock, mock_patch: Mock) -> None:
+        """Shortlist moves go straight to the v3 update endpoint."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api.return_value.URL_BASE = "https://readwise.io/api/v3"
+            mock_patch.return_value = Mock(status_code=200, text="")
+
+            client = ReadwiseClient(token="test_token")
+            client._article_cache["article_123"] = {"id": "article_123"}
+            success = client.move_to_shortlist("article_123")
+
+            assert success is True
+            mock_patch.assert_called_once()
+            kwargs = mock_patch.call_args.kwargs
+            assert kwargs["url"].endswith("/update/article_123/")
+            assert kwargs["json"] == {"location": "shortlist"}
+            assert kwargs["headers"]["Authorization"] == "Token test_token"
+            assert client._article_cache["article_123"]["location"] == "shortlist"
+
+    @patch("rwreader.client.requests.patch")
+    @patch("rwreader.client.ReadwiseReader")
+    def test_move_to_shortlist_failure(self, mock_api: Mock, mock_patch: Mock) -> None:
+        """A non-2xx response or a network error yields False."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api.return_value.URL_BASE = "https://readwise.io/api/v3"
+            client = ReadwiseClient(token="test_token")
+
+            mock_patch.return_value = Mock(status_code=400, text="bad request")
+            assert client.move_to_shortlist("article_123") is False
+
+            mock_patch.side_effect = ConnectionError("down")
+            assert client.move_to_shortlist("article_123") is False
+
     @patch("rwreader.client.readwise.update_document_location")
     @patch("rwreader.client.ReadwiseReader")
     def test_move_to_inbox_failure(self, mock_api: Mock, mock_update: Mock) -> None:
@@ -392,6 +515,111 @@ class TestReadwiseClient:
             success = client.delete_article("article_123")
 
             assert success is False
+
+    @patch("rwreader.client.readwise.delete_document")
+    @patch("rwreader.client.readwise.update_document_location")
+    @patch("rwreader.client.ReadwiseReader")
+    def test_index_write_through(
+        self,
+        mock_api_class: Mock,
+        mock_update: Mock,
+        mock_delete: Mock,
+        mock_document: Mock,
+    ) -> None:
+        """Fetches, moves and deletes are mirrored into the local index."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api = mock_api_class.return_value
+            mock_api.get_documents.return_value = [mock_document]
+            mock_update.return_value = (True, {})
+            mock_delete.return_value = None
+
+            index = DocumentIndex(":memory:")
+            client = ReadwiseClient(token="test_token", index=index)
+
+            client.get_inbox()
+            assert index.get("doc_123")["location"] == "new"  # type: ignore[index]
+
+            client.get_archive()
+            assert index.count() == 1
+
+            client.move_to_archive("doc_123")
+            assert index.get("doc_123")["location"] == "archive"  # type: ignore[index]
+
+            client.move_to_later("doc_123")
+            assert index.get("doc_123")["location"] == "later"  # type: ignore[index]
+
+            client.move_to_inbox("doc_123")
+            assert index.get("doc_123")["location"] == "new"  # type: ignore[index]
+
+            client.delete_article("doc_123")
+            assert index.get("doc_123") is None
+
+            client.close()
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_index_errors_do_not_break_fetch(
+        self, mock_api_class: Mock, mock_document: Mock
+    ) -> None:
+        """A failing index never breaks the API path."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api = mock_api_class.return_value
+            mock_api.get_documents.return_value = [mock_document]
+
+            index = Mock()
+            index.upsert_many.side_effect = RuntimeError("disk full")
+            index.set_location.side_effect = RuntimeError("disk full")
+            client = ReadwiseClient(token="test_token", index=index)
+
+            assert len(client.get_inbox()) == 1
+            with patch(
+                "rwreader.client.readwise.update_document_location",
+                return_value=(True, {}),
+            ):
+                assert client.move_to_archive("doc_123") is True
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_sync_index_full_then_incremental(
+        self, mock_api_class: Mock, mock_document: Mock
+    ) -> None:
+        """First sync fetches everything and prunes; later syncs pass updated_after."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api = mock_api_class.return_value
+            mock_api.get_documents.return_value = [mock_document]
+
+            index = DocumentIndex(":memory:")
+            index.upsert_many([{"id": "stale", "title": "gone remotely"}])
+            client = ReadwiseClient(token="test_token", index=index)
+
+            written = client.sync_index()
+            assert written == 1
+            mock_api.get_documents.assert_called_with(updated_after=None)
+            assert index.get("stale") is None
+            assert index.last_sync is not None
+
+            first_sync = index.last_sync
+            written = client.sync_index()
+            assert written == 1
+            kwargs = mock_api.get_documents.call_args.kwargs
+            assert kwargs["updated_after"] == first_sync
+            client.close()
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_sync_index_without_index(self, mock_api_class: Mock) -> None:
+        """Sync is a no-op when no index is attached."""
+        with patch.dict("os.environ", {}, clear=True):
+            client = ReadwiseClient(token="test_token")
+            assert client.sync_index() == 0
+            mock_api_class.return_value.get_documents.assert_not_called()
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_sync_index_propagates_api_error(self, mock_api_class: Mock) -> None:
+        """API failures during sync are raised to the caller."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api_class.return_value.get_documents.side_effect = RuntimeError("x")
+            client = ReadwiseClient(token="test_token", index=DocumentIndex())
+            with pytest.raises(RuntimeError):
+                client.sync_index()
+            client.close()
 
     @patch("rwreader.client.ReadwiseReader")
     def test_invalidate_cache(self, mock_api: Mock) -> None:

@@ -21,11 +21,13 @@ src/rwreader/
 ├── config.py              # Configuration handling with 1Password CLI support
 ├── client.py              # Readwise API client
 ├── cache.py               # Caching functionality
+├── index.py               # Local SQLite index of document metadata
 ├── ui/
 │   ├── app.py             # Main TUI application class (1277 lines - core functionality)
 │   ├── screens/           # Modal screens (help, confirmation, etc.)
 │   └── widgets/           # Custom UI widgets
 └── utils/
+    ├── extractors.py          # Links, attachments, code blocks, IOCs, references
     ├── markdown_converter.py  # Article content formatting
     └── ui_helpers.py          # UI utility functions
 ```
@@ -76,7 +78,7 @@ uv pip install -e ".[dev]"     # Install in development mode
 
 ### Testing
 
-198 automated tests (pytest) covering client, cache, config, and UI. See [TESTING_AUTOMATED.md](TESTING_AUTOMATED.md) for the automated suite and [TESTING.md](TESTING.md) for manual QA scenarios.
+292 automated tests (pytest) covering client, cache, index, extractors, config, and UI. See [TESTING_AUTOMATED.md](TESTING_AUTOMATED.md) for the automated suite and [TESTING.md](TESTING.md) for manual QA scenarios.
 
 ```bash
 uv run pytest

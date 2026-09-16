@@ -1,6 +1,7 @@
 """Confirmation dialog screens for rwreader."""
 
-from typing import Any, Literal
+from collections.abc import Callable
+from typing import Any, ClassVar, Literal
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -12,7 +13,7 @@ from textual.widgets import Button, Static
 class ConfirmScreen(ModalScreen):
     """Modal screen for confirming actions like deletion."""
 
-    BINDINGS: list[Binding | tuple[str, str] | tuple[str, str, str]] = [  # noqa: RUF012
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Cancel"),
         ("enter", "confirm", "Confirm"),
     ]
@@ -21,7 +22,7 @@ class ConfirmScreen(ModalScreen):
         self,
         title: str = "Confirm",
         message: str = "Are you sure?",
-        on_confirm=None,
+        on_confirm: Callable[..., Any] | None = None,
         data: Any = None,
         variant: Literal["default", "primary", "success", "warning", "error"] = "error",
     ) -> None:

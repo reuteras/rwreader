@@ -1,5 +1,7 @@
 """Load more widget for progressive loading."""
 
+from typing import Any
+
 from textual.widgets import ListItem, Static
 
 
@@ -23,7 +25,7 @@ class LoadMoreWidget(Static):
     }
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize the widget."""
         super().__init__(content="", **kwargs)
         self.update_load_more()
