@@ -17,9 +17,21 @@ Readwise Reader TUI uses a single-window, stack-based navigation:
 - **j / k**: Navigate categories
 - **Enter**: Select category and view articles
 - **,**: Refresh category counts
+- **v**: Open the library dashboard (overview, inbox aging, sources, tags)
 - **h / ?**: Show/hide this help
 - **d**: Toggle dark mode
 - **q**: Quit
+
+## Dashboard Screen (v from the category list)
+Reads from a local index of document metadata, kept up to date as you browse.
+- **Left / Right**: Switch tabs (Overview, Inbox aging, Sources, Tags)
+- **j / k**: Navigate rows
+- **Enter**: Drill into a filtered, read-only article list for the selected
+  row (a location, an age bucket, a source or a tag)
+- **,**: Recompute the tables from the local index (no API calls)
+- **s**: Full sync — fetch every document from the API once, so locations
+  you have not browsed yet (e.g. an unvisited Archive) are included
+- **Escape / Backspace**: Back to category list
 
 ## Article List Screen
 - **j / k**: Navigate articles

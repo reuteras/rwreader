@@ -2,14 +2,14 @@
 
 ## Overview
 
-RWReader has **292 automated tests** covering critical functionality. Tests use pytest and run automatically on every PR via GitHub Actions.
+RWReader has **312 automated tests** covering critical functionality. Tests use pytest and run automatically on every PR via GitHub Actions.
 
 ## Test Statistics
 
-- **Total Tests**: 292 (275 unit + 17 integration, of which 2 integration tests are skipped)
-- **Test Files**: 12
-- **Lines of Test Code**: ~4,100
-- **Current Coverage**: 62% overall (54% when running only the fast/non-integration suite; target: 70%+)
+- **Total Tests**: 312 (295 unit + 17 integration, of which 2 integration tests are skipped)
+- **Test Files**: 14
+- **Lines of Test Code**: ~4,700
+- **Current Coverage**: 65% overall (57% when running only the fast/non-integration suite; target: 70%+)
 
 ## Running Tests
 
@@ -72,6 +72,8 @@ tests/
 ├── test_index.py                  # Local SQLite index tests (24 tests)
 ├── test_extractors.py             # Link/attachment/code/IOC/reference extraction (39 tests)
 ├── test_extract_screens.py        # Extract menu, code block and indicator screens (9 tests)
+├── test_dashboard.py              # Dashboard screen and its helper functions (15 tests)
+├── test_article_list_preset.py    # Article list dashboard-snapshot mode (4 tests)
 ├── test_markdown_converter.py     # Markdown processing tests (25 tests)
 ├── test_highlight_manager.py      # Highlight extraction/formatting tests (24 tests)
 ├── test_article_reader.py         # Article reader screen tests (9 tests)

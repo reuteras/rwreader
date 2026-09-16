@@ -228,6 +228,30 @@ class TestDocumentIndex:
         assert index.site_counts() == [("one.com", DOC_COUNT_2), ("two.com", 1)]
         assert index.site_counts(limit=1) == [("one.com", DOC_COUNT_2)]
 
+    def test_site_counts_with_unread(self, index: DocumentIndex) -> None:
+        """Total and unread are both reported per site, filterable by location."""
+        index.upsert_many(
+            [
+                _article("a", site_name="one.com", location="new"),
+                _article(
+                    "b",
+                    site_name="one.com",
+                    location="new",
+                    first_opened_at="2024-01-02T00:00:00Z",
+                ),
+                _article("c", site_name="two.com", location="later"),
+                _article("d", site_name=""),
+            ]
+        )
+        assert index.site_counts_with_unread() == [
+            ("one.com", DOC_COUNT_2, 1),
+            ("two.com", 1, 1),
+        ]
+        assert index.site_counts_with_unread(location="new") == [
+            ("one.com", DOC_COUNT_2, 1)
+        ]
+        assert index.site_counts_with_unread(limit=1) == [("one.com", DOC_COUNT_2, 1)]
+
     def test_category_counts(self, index: DocumentIndex) -> None:
         """Document categories are counted; empty ones show as unknown."""
         index.upsert_many(

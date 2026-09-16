@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CVEs; defanged forms restored; copy or export as CSV/JSON) and references
   (DOI, arXiv, GitHub, RFC)
 - `S` in any link list saves every listed link to Readwise after confirmation
+- Library dashboard (`v` from the category list): tabbed Overview, Inbox
+  aging, Sources and Tags views built on the local index, each row
+  drilling into a filtered, read-only article list; `s` triggers a full
+  sync so unbrowsed locations (e.g. Archive) are included in the counts
 
 ### Fixed
 

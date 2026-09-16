@@ -7,6 +7,7 @@ A modern, keyboard-driven terminal user interface (TUI) for [Readwise Reader](ht
 - **Browse Library**: Navigate your entire Readwise Reader library with smooth keyboard controls
 - **Multiple Views**: Organize articles by Inbox, Later, Shortlist, Feed, and Archive categories
 - **Local Index**: A small SQLite index of document metadata (tags, categories, sites, word counts) kept in sync as you browse
+- **Dashboard**: Library overview, inbox aging, top sources and tags, each with drill-down into a filtered article list
 - **Read Articles**: Display formatted article content with syntax highlighting
 - **Vim-style Navigation**: Use j/k for navigation, with arrow keys as fallback
 - **Link Management**: Extract, save, and share article links to Readwise
@@ -165,6 +166,7 @@ rwreader
 | `d`       | Toggle dark/light mode |
 | `c`       | Clear content pane     |
 | `G` / `,` | Refresh all data       |
+| `v`       | Open library dashboard |
 | `Space`   | Load more articles     |
 | `q`       | Quit                   |
 

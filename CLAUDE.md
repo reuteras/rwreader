@@ -24,7 +24,7 @@ src/rwreader/
 ├── index.py               # Local SQLite index of document metadata
 ├── ui/
 │   ├── app.py             # Main TUI application class (1277 lines - core functionality)
-│   ├── screens/           # Modal screens (help, confirmation, etc.)
+│   ├── screens/           # Modal screens (help, confirmation, dashboard, etc.)
 │   └── widgets/           # Custom UI widgets
 └── utils/
     ├── extractors.py          # Links, attachments, code blocks, IOCs, references
@@ -78,7 +78,7 @@ uv pip install -e ".[dev]"     # Install in development mode
 
 ### Testing
 
-292 automated tests (pytest) covering client, cache, index, extractors, config, and UI. See [TESTING_AUTOMATED.md](TESTING_AUTOMATED.md) for the automated suite and [TESTING.md](TESTING.md) for manual QA scenarios.
+312 automated tests (pytest) covering client, cache, index, extractors, dashboard, config, and UI. See [TESTING_AUTOMATED.md](TESTING_AUTOMATED.md) for the automated suite and [TESTING.md](TESTING.md) for manual QA scenarios.
 
 ```bash
 uv run pytest

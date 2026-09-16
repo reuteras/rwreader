@@ -450,6 +450,37 @@ class DocumentIndex:
             rows = self._conn.execute(sql, params).fetchall()
         return [(row["site_name"], int(row["n"])) for row in rows]
 
+    def site_counts_with_unread(
+        self, location: str | None = None, limit: int | None = None
+    ) -> list[tuple[str, int, int]]:
+        """Count total and unread documents per site, most common first.
+
+        Args:
+            location: Restrict to one location.
+            limit: Maximum number of sites to return.
+
+        Returns:
+            List of (site_name, total, unread) tuples.
+        """
+        sql = (
+            "SELECT site_name, COUNT(*) AS total, "
+            "SUM(CASE WHEN first_opened_at = '' THEN 1 ELSE 0 END) AS unread "
+            "FROM documents WHERE site_name != ''"
+        )
+        params: list[Any] = []
+        if location:
+            sql += " AND location = ?"
+            params.append(location)
+        sql += " GROUP BY site_name ORDER BY total DESC, site_name ASC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(int(limit))
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
+        return [
+            (row["site_name"], int(row["total"]), int(row["unread"])) for row in rows
+        ]
+
     def category_counts(self, location: str | None = None) -> list[tuple[str, int]]:
         """Count documents per document category (article, rss, pdf, ...)."""
         sql = "SELECT category, COUNT(*) AS n FROM documents"

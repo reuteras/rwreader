@@ -28,6 +28,7 @@ class CategoryListScreen(Screen):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select_category", "Select"),
         Binding("comma", "refresh", "Refresh"),
+        Binding("v", "dashboard", "Dashboard"),
         Binding("h", "help", "Help"),
         Binding("d", "toggle_dark", "Toggle dark mode"),
         Binding("q", "quit", "Quit"),
@@ -291,6 +292,12 @@ class CategoryListScreen(Screen):
                         ArticleListScreen(category=category),
                         self._on_article_list_dismissed,
                     )
+
+    def action_dashboard(self) -> None:
+        """Open the library dashboard."""
+        from .dashboard import DashboardScreen  # noqa: PLC0415
+
+        self.app.push_screen(DashboardScreen())
 
     def action_refresh(self) -> None:
         """Refresh category counts."""

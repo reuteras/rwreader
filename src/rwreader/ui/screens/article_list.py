@@ -43,15 +43,30 @@ class ArticleListScreen(Screen):
         Binding("space", "load_more", "Load more"),
     ]
 
-    def __init__(self, category: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        category: str,
+        preset_articles: list[dict[str, Any]] | None = None,
+        title: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Initialize the article list screen.
 
         Args:
-            category: Category name (inbox, later, feed, archive)
+            category: Category name (inbox, later, shortlist, feed, archive),
+                or "custom" for a dashboard-provided snapshot list.
+            preset_articles: When given, the list is populated from this
+                snapshot instead of fetching from the API. Used by the
+                dashboard's drill-down views (aging bucket, source, tag).
+                A preset list does not support refresh or load-more, and
+                any successful move always removes the item from view.
+            title: Heading override; defaults to ``category`` upper-cased.
             **kwargs: Additional keyword arguments
         """
         super().__init__(**kwargs)
         self.category = category
+        self.preset_articles = preset_articles
+        self.title_override = title
         self.articles: list[dict[str, Any]] = []
         self.current_index = 0
         self.initial_page_size = 20
@@ -61,16 +76,25 @@ class ArticleListScreen(Screen):
     def compose(self) -> ComposeResult:
         """Create the article list UI."""
         yield Header(show_clock=True)
-        yield Static(f"{self.category.upper()}", id="category_title")
+        yield Static(self.title_override or self.category.upper(), id="category_title")
         yield ListView(id="article_list")
         yield Footer()
 
     async def on_mount(self) -> None:
         """Load articles when screen mounts."""
-        self.load_articles()
+        if self.preset_articles is not None:
+            self.articles = list(self.preset_articles)
+            self.populate_list()
+        else:
+            self.load_articles()
 
     async def on_resume(self) -> None:
         """Refresh articles when screen resumes (e.g., after returning from reader)."""
+        if self.preset_articles is not None:
+            # A snapshot list from the dashboard; re-populate without re-querying
+            # so opened articles still show, but skip the API refresh.
+            self.populate_list()
+            return
         logger.debug(f"ArticleListScreen resumed, refreshing {self.category} articles")
         logger.debug(f"Current articles count: {len(self.articles)}")
         # Clear cache and trigger a background refresh to sync with server
@@ -469,12 +493,21 @@ class ArticleListScreen(Screen):
 
     def action_refresh(self) -> None:
         """Refresh articles."""
+        if self.preset_articles is not None:
+            self.notify(
+                "Snapshot view — reopen from the dashboard to refresh",
+                title="Refresh",
+            )
+            return
         if hasattr(self.app, "client"):
             self.app.client.clear_cache()
         self.load_articles(load_more=False, from_refresh=True)
 
     def action_load_more(self) -> None:
         """Load more articles."""
+        if self.preset_articles is not None:
+            self.notify("Not applicable in this view", title="Load more")
+            return
         self.load_articles(load_more=True)
 
     def action_back(self) -> None:
