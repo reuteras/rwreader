@@ -4,13 +4,9 @@
 class RWReaderError(Exception):
     """Base exception for all rwreader errors."""
 
-    pass
-
 
 class ConfigurationError(RWReaderError):
     """Raised when there's an error with configuration."""
-
-    pass
 
 
 class ReadwiseAPIError(RWReaderError):
@@ -89,10 +85,6 @@ class ReadwiseServerError(ReadwiseAPIError):
 class CacheError(RWReaderError):
     """Raised when there's an error with caching operations."""
 
-    pass
-
 
 class ArticleError(RWReaderError):
     """Raised when there's an error processing an article."""
-
-    pass

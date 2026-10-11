@@ -148,7 +148,7 @@ class LinkSelectionScreen(ModalScreen):
                         path[:path_max] + "..." if len(path) > path_max else path
                     )
                     url = f"{domain}{path_truncated}"
-            except Exception:
+            except ValueError:
                 # Fall back to simple truncation if URL parsing fails
                 url = url[: max_line_length - 3] + "..."
 
@@ -230,7 +230,7 @@ class LinkSelectionScreen(ModalScreen):
 
             self._process_link(link=link)
             self.app.pop_screen()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - keep the TUI running
             logger.error(msg=f"Error processing selection: {e}")
             self.notify(
                 title="Error", message=f"Error: {e!s}", timeout=3, severity="error"
@@ -268,7 +268,7 @@ class LinkSelectionScreen(ModalScreen):
 
             # Close the screen
             self.app.pop_screen()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - keep the TUI running
             logger.error(msg=f"Error handling link selection: {e}")
             self.notify(
                 title="Error", message=f"Error: {e!s}", timeout=3, severity="error"
@@ -333,8 +333,7 @@ class LinkSelectionScreen(ModalScreen):
                 ):
                     response.raise_for_status()
                     with open(file=download_path, mode="wb") as f:
-                        for chunk in response.iter_bytes():
-                            f.write(chunk)
+                        f.writelines(response.iter_bytes())
             except httpx.HTTPError as e:
                 logger.error(msg=f"HTTP error downloading file: {e}")
                 app.call_from_thread(
@@ -345,7 +344,7 @@ class LinkSelectionScreen(ModalScreen):
                     severity="error",
                 )
                 return
-            except Exception as e:
+            except OSError as e:
                 logger.error(msg=f"Error downloading file: {e}")
                 app.call_from_thread(
                     app.notify,
@@ -440,7 +439,7 @@ class LinkSelectionScreen(ModalScreen):
                     timeout=5,
                     severity="error",
                 )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - keep the TUI running
             logger.error(msg=f"Error saving to Readwise: {err}")
             self.notify(
                 title="Readwise",

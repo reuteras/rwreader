@@ -2,7 +2,7 @@
 
 import logging
 import webbrowser
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from textual import work
 from textual.app import ComposeResult
@@ -15,9 +15,6 @@ from ...utils.ui_helpers import (
     safe_get_article_display_title,
     safe_set_text_style,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +242,7 @@ class ArticleListScreen(Screen):
                     title=self.category.capitalize(),
                 )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - keep the TUI running
             logger.error(f"Error loading articles: {e}")
             self.app.call_from_thread(
                 self.notify, f"Error loading articles: {e}", severity="error"
@@ -439,7 +436,7 @@ class ArticleListScreen(Screen):
                     # Remove from list
                     self.articles.pop(index)
                     self.populate_list()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - keep the TUI running
                 logger.error(f"Error deleting article: {e}")
                 self.notify(f"Error: {e}", severity="error")
 
@@ -461,7 +458,7 @@ class ArticleListScreen(Screen):
             try:
                 webbrowser.open(url)
                 self.notify("Opening in browser", title="Browser")
-            except Exception as e:
+            except (webbrowser.Error, OSError) as e:
                 logger.error(f"Error opening browser: {e}")
                 self.notify(f"Error: {e}", severity="error")
         else:
@@ -485,7 +482,7 @@ class ArticleListScreen(Screen):
             try:
                 webbrowser.open(url)
                 self.notify("Opening source URL in browser", title="Browser")
-            except Exception as e:
+            except (webbrowser.Error, OSError) as e:
                 logger.error(f"Error opening browser: {e}")
                 self.notify(f"Error: {e}", severity="error")
         else:

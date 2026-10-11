@@ -5,7 +5,7 @@ import logging
 import re
 import webbrowser
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 from urllib.parse import urlparse
 
 from textual import work
@@ -34,9 +34,6 @@ from ...utils.ui_helpers import format_article_content, move_article_to_destinat
 from ..widgets.linkable_markdown_viewer import LinkableMarkdownViewer
 from .extract_screens import CodeBlockScreen, ExtractMenuScreen, IndicatorScreen
 from .link_screens import LinkSelectionScreen
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +181,7 @@ class ArticleReaderScreen(Screen):
             self.notify("Timeout loading article", severity="error")
             content_view = self.query_one("#article_content", LinkableMarkdownViewer)
             content_view.update_content("# Timeout\n\nFailed to load article in time.")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - keep the TUI running
             logger.error(f"Error loading article: {e}")
             self.notify(f"Error: {e}", severity="error")
             content_view = self.query_one("#article_content", LinkableMarkdownViewer)
@@ -232,8 +229,8 @@ class ArticleReaderScreen(Screen):
                 title="Highlights",
             )
 
-        except Exception as e:
-            logger.error(f"Error fetching highlights: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Error fetching highlights")
 
     # ── Paragraph cursor helpers ──────────────────────────────────────────
 
@@ -275,7 +272,7 @@ class ArticleReaderScreen(Screen):
             content_view = self.query_one("#article_content", LinkableMarkdownViewer)
             content_view.update_content(self._get_display_markdown())
             self._update_position_widget()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - widget may not be mounted
             logger.debug(f"Error updating display: {e}")
 
     def _update_position_widget(self) -> None:
@@ -312,7 +309,7 @@ class ArticleReaderScreen(Screen):
             pct = offset / total
             target = int(content_view.virtual_size.height * pct)
             content_view.scroll_to(y=target, animate=False)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - widget may not be mounted
             logger.debug(f"Error scrolling to cursor: {e}")
 
     # ── Cursor actions ────────────────────────────────────────────────────
@@ -423,8 +420,8 @@ class ArticleReaderScreen(Screen):
         try:
             content_view = self.query_one("#article_content", LinkableMarkdownViewer)
             content_view.scroll_home(animate=False)
-        except Exception:
-            pass  # Widget may not be mounted yet
+        except Exception as e:  # noqa: BLE001 - widget may not be mounted yet
+            logger.debug(f"Could not scroll article content to top: {e}")
 
         # Load new article content
         self.load_article_content()
@@ -523,7 +520,7 @@ class ArticleReaderScreen(Screen):
                     else:
                         self.notify("No more articles", title="Info")
                         self.dismiss({"articles": list(self.article_list)})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - keep the TUI running
                 logger.error(f"Error deleting article: {e}")
                 self.notify(f"Error: {e}", severity="error")
 
@@ -534,7 +531,7 @@ class ArticleReaderScreen(Screen):
             try:
                 webbrowser.open(url)
                 self.notify("Opening in browser", title="Browser")
-            except Exception as e:
+            except (webbrowser.Error, OSError) as e:
                 logger.error(f"Error opening browser: {e}")
                 self.notify(f"Error: {e}", severity="error")
         else:
@@ -547,7 +544,7 @@ class ArticleReaderScreen(Screen):
             try:
                 webbrowser.open(url)
                 self.notify("Opening source URL in browser", title="Browser")
-            except Exception as e:
+            except (webbrowser.Error, OSError) as e:
                 logger.error(f"Error opening browser: {e}")
                 self.notify(f"Error: {e}", severity="error")
         else:

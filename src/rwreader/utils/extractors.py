@@ -256,7 +256,9 @@ def extract_attachments(
 
 # ── Code blocks ────────────────────────────────────────────────────────────
 
-_FENCE_RE = re.compile(r"^```[ \t]*([\w+#.-]*)[ \t]*\n(.*?)^```[ \t]*$", re.M | re.S)
+_FENCE_RE = re.compile(
+    r"^```[ \t]*([\w+#.-]*)[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL
+)
 
 _LANGUAGE_EXTENSIONS: dict[str, str] = {
     "python": "py",
@@ -343,8 +345,13 @@ def _fix_scheme(match: re.Match[str]) -> str:
 
 
 _DEFANG_PATTERNS: list[tuple[re.Pattern[str], str | Callable[[re.Match[str]], str]]] = [
-    (re.compile(r"hxxps?://|h\[tt\]ps?://", re.I), _fix_scheme),
-    (re.compile(r"\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}|\s+dot\s+", re.I), "."),
+    (re.compile(r"hxxps?://|h\[tt\]ps?://", re.IGNORECASE), _fix_scheme),
+    (
+        re.compile(
+            r"\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}|\s+dot\s+", re.IGNORECASE
+        ),
+        ".",
+    ),
     (re.compile(r"\[://\]"), "://"),
     (re.compile(r"\[:\]"), ":"),
     (re.compile(r"\[@\]|\(@\)|\{@\}"), "@"),
@@ -352,16 +359,18 @@ _DEFANG_PATTERNS: list[tuple[re.Pattern[str], str | Callable[[re.Match[str]], st
 ]
 
 _IPV4_RE = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
-_IPV6_RE = re.compile(r"(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])", re.I)
-_SHA512_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{128}(?![0-9a-f])", re.I)
-_SHA256_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])", re.I)
-_SHA1_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", re.I)
-_MD5_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])", re.I)
-_CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.I)
-_EMAIL_RE = re.compile(r"\b[\w.+-]+@(?:[\w-]+\.)+[a-z]{2,}\b", re.I)
-_URL_RE = re.compile(r"\bhttps?://[^\s<>\"'`\]\)}]+", re.I)
+_IPV6_RE = re.compile(
+    r"(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])", re.IGNORECASE
+)
+_SHA512_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{128}(?![0-9a-f])", re.IGNORECASE)
+_SHA256_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])", re.IGNORECASE)
+_SHA1_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", re.IGNORECASE)
+_MD5_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])", re.IGNORECASE)
+_CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@(?:[\w-]+\.)+[a-z]{2,}\b", re.IGNORECASE)
+_URL_RE = re.compile(r"\bhttps?://[^\s<>\"'`\]\)}]+", re.IGNORECASE)
 _DOMAIN_RE = re.compile(
-    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b", re.I
+    r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b", re.IGNORECASE
 )
 _HEX_ONLY_RE = re.compile(r"^[0-9]+$")
 
@@ -590,14 +599,15 @@ def format_indicators(indicators: Iterable[Indicator], fmt: str = "text") -> str
 
 # ── References ─────────────────────────────────────────────────────────────
 
-_DOI_RE = re.compile(r"\b10\.\d{4,9}/[^\s\"'<>()\[\]]+", re.I)
+_DOI_RE = re.compile(r"\b10\.\d{4,9}/[^\s\"'<>()\[\]]+", re.IGNORECASE)
 _ARXIV_RE = re.compile(
-    r"(?:arxiv:\s*|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5}(?:v\d+)?)", re.I
+    r"(?:arxiv:\s*|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5}(?:v\d+)?)", re.IGNORECASE
 )
 _GITHUB_RE = re.compile(
-    r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?=[/#?\s\"'<>)\]]|$)", re.I
+    r"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?=[/#?\s\"'<>)\]]|$)",
+    re.IGNORECASE,
 )
-_RFC_RE = re.compile(r"\bRFC[ -]?(\d{3,5})\b", re.I)
+_RFC_RE = re.compile(r"\bRFC[ -]?(\d{3,5})\b", re.IGNORECASE)
 _GITHUB_NON_REPOS: frozenset[str] = frozenset(
     {"features", "topics", "settings", "orgs", "marketplace", "sponsors", "about"}
 )

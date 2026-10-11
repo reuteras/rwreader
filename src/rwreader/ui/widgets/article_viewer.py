@@ -38,14 +38,14 @@ class ArticleViewer(MarkdownViewer):
                 markdown = "# Content Not Available\n\nThe article content could not be loaded."
 
             self.document.update(markdown=markdown)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - fall back to an error message
             logger.error(msg=f"Error updating article content: {e}")
             # Attempt to set a simple error message as fallback
             try:
                 self.document.update(
                     markdown="**Error loading content**\n\nPlease try again or check logs."
                 )
-            except Exception as nested_e:
+            except Exception as nested_e:  # noqa: BLE001 - last-resort fallback
                 logger.error(
                     msg=f"Failed to set error message in article viewer: {nested_e}"
                 )
@@ -62,7 +62,7 @@ class ArticleViewer(MarkdownViewer):
                 event.prevent_default()
                 webbrowser.open(url=event.href)
                 self.app.notify(message=f"Opening: {event.href}", title="Browser")
-            except Exception as e:
+            except (webbrowser.Error, OSError) as e:
                 logger.error(msg=f"Error opening link: {e}")
                 self.app.notify(
                     message=f"Error opening link: {e}", title="Error", severity="error"

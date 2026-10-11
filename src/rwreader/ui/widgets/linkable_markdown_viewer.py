@@ -97,14 +97,14 @@ class LinkableMarkdownViewer(MarkdownViewer):
 
             # Re-extract links from the new content
             self.extracted_links = self.extract_links(markdown_text=markdown)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - fall back to an error message
             logger.error(msg=f"Error updating markdown content: {e}")
             # Attempt to set a simple error message as fallback
             try:
                 self.document.update(
                     markdown="**Error loading content**\n\nPlease try again or check logs."
                 )
-            except Exception as nested_e:
+            except Exception as nested_e:  # noqa: BLE001 - last-resort fallback
                 logger.error(
                     msg=f"Failed to set error message in markdown viewer: {nested_e}"
                 )

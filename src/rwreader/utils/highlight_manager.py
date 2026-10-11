@@ -41,7 +41,8 @@ def _find_node_readwise_cli() -> str | None:
             if _CLI_FINGERPRINT in probe.stdout or _CLI_FINGERPRINT in probe.stderr:
                 logger.debug(f"Found Node.js readwise CLI at {candidate!r}")
                 return candidate
-        except Exception:
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug(f"Probe of {candidate!r} failed: {e}")
             continue
     return None
 
@@ -117,7 +118,7 @@ def get_highlights_for_document(document_id: str) -> list[dict[str, Any]]:
             f"JSON decode error from readwise CLI: {e} — stdout was: {result.stdout[:200]!r}"
         )
         return []
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         logger.error(f"Error fetching highlights: {e}")
         return []
 
@@ -144,7 +145,7 @@ def find_html_fragment(html_content: str, paragraph_text: str) -> str:
             tag_text = re.sub(r"\s+", " ", tag.get_text()).strip()
             if normalized_target == tag_text or normalized_target in tag_text:
                 return str(tag)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - arbitrary HTML; fall back to bare paragraph
         logger.debug(f"HTML fragment lookup failed: {e}")
 
     return f"<p>{paragraph_text}</p>"
@@ -191,7 +192,7 @@ def create_reader_highlight(
         return False, result.stderr[:100]
     except subprocess.TimeoutExpired:
         return False, "Timeout creating highlight"
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         logger.error(f"Error creating highlight: {e}")
         return False, str(e)
 
@@ -264,7 +265,7 @@ def delete_highlight(highlight_id: str | int) -> tuple[bool, str]:
         return False, f"CLI error: {result.stderr[:100]}"
     except subprocess.TimeoutExpired:
         return False, "Timeout deleting highlight"
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         logger.error(f"Error deleting highlight: {e}")
         return False, str(e)
 

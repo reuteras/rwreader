@@ -63,7 +63,7 @@ dev = [
 
 [tool.ruff]
 target-version = "py311"
-lint.select = [
+lint.extend-select = [
     "PL",  # Pylint
     "E",   # pycodestyle
     "F",   # pyflakes

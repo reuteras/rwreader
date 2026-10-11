@@ -187,7 +187,7 @@ class Configuration:
                 version: str = metadata.version(distribution_name="rwreader")
                 print(f"rwreader version: {version}")
                 sys.exit(0)
-            except Exception as e:
+            except metadata.PackageNotFoundError as e:
                 print(f"Error getting version: {e}")
                 sys.exit(1)
 
@@ -247,7 +247,7 @@ class Configuration:
             # Get version
             try:
                 self.version: str = metadata.version(distribution_name="rwreader")
-            except Exception:
+            except metadata.PackageNotFoundError:
                 self.version = "0.1.0"  # Default version if not installed
 
         except KeyError as err:
@@ -297,7 +297,7 @@ class Configuration:
         if not path.parent.exists():
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
+            except OSError as e:
                 logger.error(msg=f"Error creating directory for config file: {e}")
                 print(f"Error creating directory for config file: {e}")
                 sys.exit(1)
@@ -305,7 +305,7 @@ class Configuration:
         # Write the default configuration
         try:
             path.write_text(data=DEFAULT_CONFIG)
-        except Exception as e:
+        except OSError as e:
             logger.error(msg=f"Error writing configuration file: {e}")
             print(f"Error writing configuration file: {e}")
             sys.exit(1)

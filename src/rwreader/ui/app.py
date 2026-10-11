@@ -1,6 +1,7 @@
 """Application class for rwreader with single-window navigation."""
 
 import logging
+import sqlite3
 import sys
 from pathlib import Path, PurePath
 from typing import ClassVar
@@ -12,6 +13,7 @@ from textual.widgets import Footer, Header
 # Import our improved client
 from ..client import ReadwiseClient, create_readwise_client
 from ..config import Configuration
+from ..exceptions import RWReaderError
 from ..index import DocumentIndex
 from .screens.help import HelpScreen
 
@@ -58,14 +60,14 @@ class RWReader(App[None]):
         ):
             try:
                 self.client.index = DocumentIndex(Path(index_path))
-            except Exception as e:
+            except (OSError, sqlite3.Error) as e:
                 logger.error(f"Could not open local index at {index_path}: {e}")
 
         # Load initial data into cache (non-blocking)
         try:
             # Pre-fetch inbox data to populate cache
             self.client.get_inbox(refresh=True, limit=20)
-        except Exception as e:
+        except RWReaderError as e:
             logger.error(f"Error pre-fetching inbox: {e}")
 
         # Push the category list screen as the initial screen

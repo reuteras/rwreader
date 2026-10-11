@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import readwise
 import requests
-from readwise.api import ReadwiseReader
+from readwise.api import ReadwiseError, ReadwiseReader
 from readwise.model import Document
 
 from .exceptions import (
@@ -24,6 +24,16 @@ from .exceptions import (
 from .index import DocumentIndex, tag_names
 
 logger: logging.Logger = logging.getLogger(name=__name__)
+
+# Errors raised by readwise-api calls: API status errors, network failures and
+# ValueError (bad parameters, invalid JSON, pydantic validation).
+_API_ERRORS: tuple[type[Exception], ...] = (
+    ReadwiseError,
+    requests.RequestException,
+    ValueError,
+)
+# API errors plus failures converting the returned documents.
+_FETCH_ERRORS: tuple[type[Exception], ...] = (*_API_ERRORS, ArticleError)
 
 _MAX_ARTICLE_ID_LENGTH = 100
 
@@ -279,7 +289,7 @@ class ReadwiseClient:
             return
         try:
             self.index.upsert_many(articles)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - index is best-effort, never break the API path
             logger.warning(f"Failed to update local index: {e}")
 
     def _index_set_location(self, article_id: str, location: str) -> None:
@@ -288,7 +298,7 @@ class ReadwiseClient:
             return
         try:
             self.index.set_location(article_id, location)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - index is best-effort, never break the API path
             logger.warning(f"Failed to update location in local index: {e}")
 
     def sync_index(self, full: bool = False) -> int:
@@ -390,13 +400,13 @@ class ReadwiseClient:
 
                 return articles[:limit] if limit else articles
 
-            except Exception as e:
+            except _FETCH_ERRORS as e:
                 logger.error(msg=f"Error in get_documents for archive: {e}")
                 # Return whatever we have in the cache
                 data = cast(list[dict[str, Any]], cache["data"])
                 return data[:limit] if limit else data
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - last-resort fallback to cached data
             logger.error(msg=f"Error fetching archive: {e}")
             # Return whatever we have in the cache
             data = cast(list[dict[str, Any]], cache["data"])
@@ -468,7 +478,7 @@ class ReadwiseClient:
         Returns:
             A datetime representing the start of the timeframe
         """
-        now: datetime.datetime = datetime.datetime.now()
+        now: datetime.datetime = datetime.datetime.now(datetime.UTC)
 
         if timeframe == "day":
             return now - datetime.timedelta(days=1)
@@ -588,7 +598,7 @@ class ReadwiseClient:
         ):
             # Re-raise critical exceptions
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - last-resort fallback to cached data
             logger.error(msg=f"Unexpected error fetching {cache_key}: {e}")
             # Return cached data (even if empty) for unexpected errors
             # This maintains backward compatibility with the original behavior
@@ -644,7 +654,7 @@ class ReadwiseClient:
                 "reading_progress": document.reading_progress or 0,
             }
             return article_dict
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             logger.error(msg=f"Error converting document to dict: {e}")
             # Try to create a minimal fallback dictionary
             try:
@@ -657,7 +667,7 @@ class ReadwiseClient:
                     "read": False,
                     "state": "reading",
                 }
-            except Exception as nested_e:
+            except (AttributeError, TypeError, ValueError) as nested_e:
                 logger.error(
                     f"Severe error in fallback dictionary creation: {nested_e}"
                 )
@@ -702,7 +712,7 @@ class ReadwiseClient:
             document: Document | None = None
             try:
                 document = self._api.get_document_by_id(id=article_id)
-            except Exception as doc_error:
+            except _API_ERRORS as doc_error:
                 logger.error(msg=f"Error getting document by ID: {doc_error}")
                 _handle_api_error(doc_error, article_id)
 
@@ -814,7 +824,7 @@ class ReadwiseClient:
                     # For 404 and other errors, try to use content from original document as fallback
                     elif hasattr(document, "content") and document.content:
                         article["content"] = document.content
-                except Exception as e:
+                except (requests.RequestException, ValueError) as e:
                     logger.error(msg=f"Error fetching HTML content: {e}")
                     # Try to use any content from the original document as fallback
                     if hasattr(document, "content") and document.content:
@@ -828,7 +838,7 @@ class ReadwiseClient:
                 logger.warning(msg=f"No article found with ID {article_id}")
                 return None
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - last-resort fallback to cached article
             logger.error(msg=f"Error fetching article {article_id}: {e}")
 
             # Return what we have in cache even if incomplete
@@ -876,7 +886,7 @@ class ReadwiseClient:
                 )
                 return False
 
-        except Exception as e:
+        except _API_ERRORS as e:
             logger.error(msg=f"Error moving article {article_id} to inbox: {e}")
             return False
 
@@ -912,7 +922,7 @@ class ReadwiseClient:
                 )
                 return False
 
-        except Exception as e:
+        except _API_ERRORS as e:
             logger.error(msg=f"Error moving article {article_id} to later: {e}")
             return False
 
@@ -951,7 +961,7 @@ class ReadwiseClient:
                 )
                 return False
 
-        except Exception as e:
+        except _API_ERRORS as e:
             logger.error(msg=f"Error moving article {article_id} to archive: {e}")
             return False
 
@@ -992,7 +1002,7 @@ class ReadwiseClient:
             self._invalidate_cache()
             return True
 
-        except Exception as e:
+        except requests.RequestException as e:
             logger.error(msg=f"Error moving article {article_id} to shortlist: {e}")
             return False
 
@@ -1012,11 +1022,11 @@ class ReadwiseClient:
             if self.index is not None:
                 try:
                     self.index.delete(article_id)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - index is best-effort, never break the API path
                     logger.warning(f"Failed to remove {article_id} from index: {e}")
             return True
 
-        except Exception as e:
+        except _API_ERRORS as e:
             logger.error(msg=f"Error deleting article {article_id}: {e}")
             return False
 
@@ -1122,7 +1132,7 @@ class ReadwiseClient:
             unread_count = len([doc for doc in documents if not doc.first_opened_at])
 
             return unread_count
-        except Exception as e:
+        except _API_ERRORS as e:
             logger.error(f"Error getting feed count: {e}")
             return 0
 
@@ -1143,7 +1153,7 @@ class ReadwiseClient:
             # If no cache, make a lightweight API call
             documents: list[Document] = self._api.get_documents(location="later")
             return len(documents)
-        except Exception as e:
+        except _API_ERRORS as e:
             logger.error(f"Error getting later count: {e}")
             return 0
 
@@ -1246,15 +1256,15 @@ class ReadwiseClient:
                     logger.error(
                         msg=f"Error saving document to Readwise (status {http_response.status_code}): {error_data}"
                     )
-                except Exception:
+                except ValueError:
                     logger.error(
                         msg=f"Error saving document to Readwise (status {http_response.status_code}): {http_response.text}"
                     )
 
                 return False, None
 
-        except Exception as e:
-            logger.error(msg=f"Error saving document to Readwise: {e}", exc_info=True)
+        except (requests.RequestException, ValueError):
+            logger.exception(msg="Error saving document to Readwise")
             # Return a tuple with success=False and None for response
             return False, None
 
@@ -1262,7 +1272,7 @@ class ReadwiseClient:
         """Close the client and clean up resources."""
         try:
             self._executor.shutdown(wait=False)
-        except Exception as e:
+        except RuntimeError as e:
             logger.error(msg=f"Error shutting down executor: {e}")
         if self.index is not None:
             self.index.close()

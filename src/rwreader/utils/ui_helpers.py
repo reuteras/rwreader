@@ -69,10 +69,14 @@ def _extract_article_content(
         largest_field: str | None = None
         largest_size = 0
         for field, value in article.items():
-            if isinstance(value, str) and len(value) > _MIN_CONTENT_LENGTH:
-                if field not in _EXCLUDED_FIELDS and len(value) > largest_size:
-                    largest_size = len(value)
-                    largest_field = field
+            if (
+                isinstance(value, str)
+                and len(value) > _MIN_CONTENT_LENGTH
+                and field not in _EXCLUDED_FIELDS
+                and len(value) > largest_size
+            ):
+                largest_size = len(value)
+                largest_field = field
         if largest_field:
             plain_content = article[largest_field]
             field_used = largest_field
@@ -105,14 +109,14 @@ def safe_set_text_style(item: Any, style: str) -> None:
     if style in valid_styles:
         try:
             item.styles.text_style = style
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - safe_* helper must never raise
             logger.error(msg=f"Error setting text style '{style}': {e}")
     else:
         logger.warning(msg=f"Attempted to apply invalid text style: '{style}'")
         # Apply default as fallback
         try:
             item.styles.text_style = "none"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - safe_* helper must never raise
             logger.error(msg=f"Error setting fallback text style: {e}")
 
 
@@ -182,11 +186,14 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
             largest_field: str | None = None
             largest_size = 0
             for field, value in article.items():
-                if isinstance(value, str) and len(value) > 100:  # noqa: PLR2004
-                    if field not in ["id", "title", "url", "author", "site_name"]:
-                        if len(value) > largest_size:
-                            largest_size = len(value)
-                            largest_field = field
+                if (
+                    isinstance(value, str)
+                    and len(value) > 100  # noqa: PLR2004
+                    and field not in ["id", "title", "url", "author", "site_name"]
+                    and len(value) > largest_size
+                ):
+                    largest_size = len(value)
+                    largest_field = field
 
             if largest_field:
                 content = article[largest_field]
@@ -195,11 +202,14 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         # Last resort: check for raw attribute text
         if not html_content and not content and hasattr(article, "__dict__"):
             for attr_name, attr_value in article.__dict__.items():
-                if isinstance(attr_value, str) and len(attr_value) > 100:  # noqa: PLR2004
-                    if attr_name not in ["id", "title", "url", "author", "site_name"]:
-                        content = attr_value
-                        content_field_used = f"__dict__.{attr_name}"
-                        break
+                if (
+                    isinstance(attr_value, str)
+                    and len(attr_value) > 100  # noqa: PLR2004
+                    and attr_name not in ["id", "title", "url", "author", "site_name"]
+                ):
+                    content = attr_value
+                    content_field_used = f"__dict__.{attr_name}"
+                    break
 
         # If no content found, log a clear warning
         if not html_content and not content:
@@ -294,7 +304,7 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
                         # Try again treating as plain text
                         content_markdown = raw_content
                         logger.debug(msg="Falling back to raw content as plain text")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - fall back to raw content
                     logger.error(msg=f"Error converting HTML to markdown: {e}")
                     # Use raw content as fallback
                     content_markdown = raw_content
@@ -325,7 +335,7 @@ def format_article_content(article: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         return header + content_markdown
 
     except Exception as e:
-        logger.error(msg=f"Error formatting article content: {e}", exc_info=True)
+        logger.exception(msg=f"Error formatting article content: {e}")
         return "# Error Formatting Content\n\nThere was an error preparing the article content. Please try again."
 
 
@@ -349,7 +359,7 @@ def safe_get_article_display_title(article: dict[str, Any]) -> str:
             display_title += f" ({site_name})"
 
         return display_title
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - safe_* helper must never raise
         logger.error(msg=f"Error creating display title: {e}")
         return "Article (Error loading title)"
 
@@ -435,6 +445,6 @@ def move_article_to_destination(
         else:
             return False, f"Failed to move to {destination}"
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report failure to the UI instead of crashing
         logger.error(msg=f"Error moving article: {e}")
         return False, f"Error: {e}"
