@@ -315,3 +315,18 @@ class TestDocumentIndex:
         """Closing twice does not raise."""
         index.close()
         index.close()
+
+    def test_set_seen_sets_and_clears_opened(self, index: DocumentIndex) -> None:
+        """Seen fills the opened timestamps; unseen clears them."""
+        index.upsert_many([_article("1"), _article("2", first_opened_at="2024-02-01")])
+        index.set_seen("1", True)
+        index.set_seen("2", True)
+        first = index.get("1")
+        second = index.get("2")
+        assert first is not None and first["first_opened_at"]
+        assert first["last_opened_at"]
+        # An earlier first open is kept
+        assert second is not None and second["first_opened_at"] == "2024-02-01"
+        assert index.query(unread_only=True) == []
+        index.set_seen("1", False)
+        assert [d["id"] for d in index.query(unread_only=True)] == ["1"]

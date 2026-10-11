@@ -275,6 +275,29 @@ class DocumentIndex:
             )
             self._conn.commit()
 
+    def set_seen(self, article_id: str, seen: bool) -> None:
+        """Record a document being marked seen or unseen.
+
+        Mirrors the Reader API: seen sets ``last_opened_at`` (and
+        ``first_opened_at`` if never opened); unseen clears both.
+        """
+        now = _now_iso()
+        with self._lock:
+            if seen:
+                self._conn.execute(
+                    "UPDATE documents SET first_opened_at = CASE WHEN "
+                    "first_opened_at = '' THEN ? ELSE first_opened_at END, "
+                    "last_opened_at = ?, indexed_at = ? WHERE id = ?",
+                    (now, now, now, article_id),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE documents SET first_opened_at = '', last_opened_at = '', "
+                    "indexed_at = ? WHERE id = ?",
+                    (now, article_id),
+                )
+            self._conn.commit()
+
     def delete(self, article_id: str) -> None:
         """Remove one document from the index."""
         with self._lock:

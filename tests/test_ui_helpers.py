@@ -12,6 +12,7 @@ from rwreader.utils.ui_helpers import (
     safe_parse_article_data,
     safe_set_text_style,
     sanitize_ui_input,
+    set_article_seen,
 )
 
 
@@ -461,6 +462,40 @@ class TestMoveArticleToDestination:
         """An object without move methods is rejected."""
         success, _ = move_article_to_destination(object(), "id1", "archive")
         assert success is False
+
+
+class TestSetArticleSeen:
+    """Test cases for set_article_seen."""
+
+    def test_marks_read_and_unread(self) -> None:
+        """Success updates the article dict's first_opened_at."""
+        client = Mock()
+        client.mark_seen.return_value = True
+        article: dict[str, Any] = {"id": "id1", "first_opened_at": ""}
+        assert set_article_seen(client, article, seen=True) == (True, "Marked as read")
+        client.mark_seen.assert_called_once_with(article_id="id1", seen=True)
+        assert article["first_opened_at"]
+        assert set_article_seen(client, article, seen=False) == (
+            True,
+            "Marked as unread",
+        )
+        assert article["first_opened_at"] == ""
+
+    def test_failure_keeps_article(self) -> None:
+        """Failures and exceptions are reported without touching the dict."""
+        client = Mock()
+        client.mark_seen.return_value = False
+        article: dict[str, Any] = {"id": "id1", "first_opened_at": ""}
+        assert set_article_seen(client, article, seen=True) == (
+            False,
+            "Failed to mark as read",
+        )
+        client.mark_seen.side_effect = RuntimeError("boom")
+        success, message = set_article_seen(client, article, seen=True)
+        assert success is False
+        assert "boom" in message
+        assert article["first_opened_at"] == ""
+        assert set_article_seen(object(), article, seen=True)[0] is False
 
 
 class TestSafeParseArticleData:

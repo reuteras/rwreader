@@ -43,10 +43,13 @@ Reads from a local index of document metadata, kept up to date as you browse.
 - **i**: Move article to Inbox
 - **s**: Move article to Shortlist
 - **D**: Delete article (with confirmation)
+- **U**: Toggle read/unread (seen in Readwise)
 - **o**: Open article in Readwise Reader browser
 - **O**: Open original source URL in browser
 - **,**: Refresh article list
 - **space**: Load more articles
+- **u**: Toggle unread only (never-opened articles from the local index,
+  covering your whole library; **,** fetches the category first)
 - **Escape / Backspace**: Back to category list
 - **h / ?**: Show/hide this help
 - **d**: Toggle dark mode
@@ -63,6 +66,7 @@ Reads from a local index of document metadata, kept up to date as you browse.
 - **i**: Move article to Inbox
 - **s**: Move article to Shortlist
 - **D**: Delete article (with confirmation)
+- **U**: Toggle read/unread (seen in Readwise)
 - **o**: Open article in Readwise Reader browser
 - **O**: Open original source URL in browser
 - **Ctrl+L**: Show links in article
