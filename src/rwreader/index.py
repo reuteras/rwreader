@@ -178,6 +178,27 @@ class DocumentIndex:
         stamp = (when or datetime.now(tz=UTC)).isoformat()
         self.set_meta("last_sync", stamp)
 
+    def get_sync_state(self) -> dict[str, Any] | None:
+        """Return the saved state of an unfinished sync, or None."""
+        value = self.get_meta("sync_state")
+        if not value:
+            return None
+        try:
+            state = json.loads(value)
+        except ValueError:
+            return None
+        return state if isinstance(state, dict) else None
+
+    def set_sync_state(self, state: dict[str, Any]) -> None:
+        """Save the state of a running sync so it can be resumed."""
+        self.set_meta("sync_state", json.dumps(state))
+
+    def clear_sync_state(self) -> None:
+        """Forget the state of a finished sync."""
+        with self._lock:
+            self._conn.execute("DELETE FROM meta WHERE key = 'sync_state'")
+            self._conn.commit()
+
     # ── Writes ────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -260,30 +281,32 @@ class DocumentIndex:
             self._conn.execute("DELETE FROM documents WHERE id = ?", (article_id,))
             self._conn.commit()
 
-    def prune_except(self, keep_ids: Iterable[str]) -> int:
-        """Delete every document whose id is not in ``keep_ids``.
+    def prune_indexed_before(self, cutoff: str) -> int:
+        """Delete documents not written since ``cutoff``.
 
-        Used after a full sync so documents deleted remotely disappear locally.
+        Used when a full sync completes: every document still present
+        remotely was rewritten during the sync, so older rows are stale.
+
+        Args:
+            cutoff: ISO 8601 UTC timestamp of when the full sync started.
 
         Returns:
             Number of rows removed.
         """
-        keep = set(keep_ids)
         with self._lock:
-            existing = [
-                row["id"] for row in self._conn.execute("SELECT id FROM documents")
-            ]
-            stale = [(doc_id,) for doc_id in existing if doc_id not in keep]
-            if stale:
-                self._conn.executemany("DELETE FROM documents WHERE id = ?", stale)
-                self._conn.commit()
-        return len(stale)
+            cursor = self._conn.execute(
+                "DELETE FROM documents WHERE indexed_at < ?", (cutoff,)
+            )
+            self._conn.commit()
+        return cursor.rowcount
 
     def clear(self) -> None:
-        """Remove all documents and the sync marker."""
+        """Remove all documents and the sync markers."""
         with self._lock:
             self._conn.execute("DELETE FROM documents")
-            self._conn.execute("DELETE FROM meta WHERE key = 'last_sync'")
+            self._conn.execute(
+                "DELETE FROM meta WHERE key IN ('last_sync', 'sync_state')"
+            )
             self._conn.commit()
 
     # ── Reads ─────────────────────────────────────────────────────────────

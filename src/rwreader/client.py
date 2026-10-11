@@ -13,7 +13,7 @@ from typing import Any, cast
 import readwise
 import requests
 from readwise.api import ReadwiseError, ReadwiseReader
-from readwise.model import Document
+from readwise.model import Document, GetResponse
 
 from .exceptions import (
     ArticleError,
@@ -22,6 +22,7 @@ from .exceptions import (
     ReadwiseServerError,
 )
 from .index import DocumentIndex, tag_names
+from .sync import AdaptivePacer, ProgressCallback, SyncProgress
 
 logger: logging.Logger = logging.getLogger(name=__name__)
 
@@ -36,6 +37,10 @@ _API_ERRORS: tuple[type[Exception], ...] = (
 _FETCH_ERRORS: tuple[type[Exception], ...] = (*_API_ERRORS, ArticleError)
 
 _MAX_ARTICLE_ID_LENGTH = 100
+
+# Consecutive network/server failures tolerated by the index sync before it
+# gives up (rate limits never count; they just slow the sync down).
+_SYNC_MAX_FAILURES = 5
 
 # Reader locations as used by the v3 API, keyed by the app's category names.
 LOCATIONS: dict[str, str] = {
@@ -158,6 +163,10 @@ class ReadwiseClient:
 
         # Lock for thread-safe cache access
         self._cache_lock = threading.Lock()
+
+        # Index sync: one at a time, stopped by close()
+        self._sync_lock = threading.Lock()
+        self._stop_sync = threading.Event()
 
         # Create the ReadwiseReader client
         self._api = ReadwiseReader(token=token)
@@ -301,44 +310,178 @@ class ReadwiseClient:
         except Exception as e:  # noqa: BLE001 - index is best-effort, never break the API path
             logger.warning(f"Failed to update location in local index: {e}")
 
-    def sync_index(self, full: bool = False) -> int:
-        """Refresh the local index from the API.
+    def _fetch_list_page(self, params: dict[str, Any]) -> GetResponse:
+        """Fetch one page of the document list.
+
+        Args:
+            params: Query parameters for ``/list/``.
+
+        Returns:
+            The parsed page, including ``next_page_cursor``.
+
+        Raises:
+            ReadwiseRateLimitError: On 429, with ``retry_after`` from the header.
+            ReadwiseAuthenticationError: On 401/403.
+            ReadwiseServerError: On 5xx.
+        """
+        response: requests.Response = requests.get(
+            url=f"{self._api.URL_BASE}/list/",
+            headers={"Authorization": f"Token {self.token}"},
+            params=params,
+            timeout=self._timeout,
+        )
+        status = response.status_code
+        if status == HTTPStatus.TOO_MANY_REQUESTS:
+            header = response.headers.get("Retry-After", "")
+            raise ReadwiseRateLimitError(
+                retry_after=int(header) if header.isdigit() else None
+            )
+        if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+            raise ReadwiseAuthenticationError()
+        if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+            raise ReadwiseServerError(
+                f"Server error listing documents: {status}", status_code=status
+            )
+        response.raise_for_status()
+        return GetResponse(**response.json())
+
+    @staticmethod
+    def _new_sync_state(index: DocumentIndex, full: bool) -> dict[str, Any]:
+        """Return the persisted state for a sync starting now."""
+        updated_after = None if full else index.last_sync
+        return {
+            "cursor": None,
+            "started": datetime.datetime.now(tz=datetime.UTC).isoformat(),
+            "updated_after": updated_after.isoformat() if updated_after else None,
+            "full": updated_after is None,
+            "written": 0,
+        }
+
+    def sync_index(
+        self,
+        full: bool = False,
+        progress: ProgressCallback | None = None,
+        pacer: AdaptivePacer | None = None,
+    ) -> int:
+        """Refresh the local index from the API, paced below the rate limit.
 
         Fetches every document updated since the last sync (or everything when
-        ``full`` is True or no sync has happened yet) and writes the metadata
-        into the index. A full sync also removes documents that no longer exist
-        remotely.
+        ``full`` is True or no sync has happened yet) one page at a time,
+        writing each page into the index as it arrives. Requests are spaced by
+        ``pacer``, which backs off whenever the API answers 429. The page
+        cursor is stored in the index, so a sync interrupted by ``close()`` or
+        an error resumes where it stopped. A completed full sync also removes
+        documents that no longer exist remotely.
 
         Args:
             full: Ignore the last sync time and re-fetch everything.
+            progress: Called after each page, while waiting and when done.
+            pacer: Request pacing; defaults to a fresh :class:`AdaptivePacer`.
 
         Returns:
-            Number of documents written to the index. Zero if no index is set.
+            Number of documents written so far in this sync (including pages
+            written before a resume). Zero if no index is set or a sync is
+            already running.
         """
         if self.index is None:
             return 0
-
-        updated_after: datetime.datetime | None = None
-        if not full:
-            updated_after = self.index.last_sync
-
-        started = datetime.datetime.now(tz=datetime.UTC)
+        if not self._sync_lock.acquire(blocking=False):
+            logger.info("Index sync already running")
+            return 0
         try:
-            documents: list[Document] = self._api.get_documents(
-                updated_after=updated_after
+            return self._run_sync(
+                self.index, full, progress or (lambda _: None), pacer or AdaptivePacer()
             )
-        except Exception as e:
-            logger.error(f"Index sync failed: {e}")
-            raise
+        finally:
+            self._sync_lock.release()
 
-        articles = [self._convert_document_to_dict(document=doc) for doc in documents]
-        written = self.index.upsert_many(articles)
-        if full or updated_after is None:
-            removed = self.index.prune_except(a["id"] for a in articles)
+    def _fetch_page_paced(
+        self,
+        params: dict[str, Any],
+        pacer: AdaptivePacer,
+        report: ProgressCallback,
+        written: int,
+    ) -> GetResponse | None:
+        """Fetch one list page, waiting out rate limits and transient failures.
+
+        Returns:
+            The page, or None if the sync was stopped while waiting.
+
+        Raises:
+            requests.RequestException: After too many consecutive failures.
+            ReadwiseServerError: After too many consecutive failures.
+        """
+        failures = 0
+        while not self._stop_sync.is_set():
+            try:
+                page = self._fetch_list_page(params)
+            except ReadwiseRateLimitError as e:
+                wait = pacer.on_rate_limit(e.retry_after)
+                reason = "rate limited"
+                logger.info(
+                    f"Index sync rate limited; waiting {wait:.0f}s, "
+                    f"then one request every {pacer.interval:.1f}s"
+                )
+            except (requests.RequestException, ReadwiseServerError) as e:
+                failures += 1
+                if failures > _SYNC_MAX_FAILURES:
+                    logger.error(f"Index sync failed: {e}")
+                    raise
+                wait = pacer.on_rate_limit(None)
+                reason = "request failed"
+                logger.warning(f"Index sync request failed ({e}); retry in {wait:.0f}s")
+            else:
+                pacer.on_success()
+                return page
+            report(SyncProgress(written=written, waiting=wait, reason=reason))
+            self._stop_sync.wait(wait)
+        return None
+
+    def _run_sync(
+        self,
+        index: DocumentIndex,
+        full: bool,
+        report: ProgressCallback,
+        pacer: AdaptivePacer,
+    ) -> int:
+        """Page through the API into the index; see :meth:`sync_index`."""
+        state = index.get_sync_state()
+        if state is None or (full and not state.get("full")):
+            state = self._new_sync_state(index, full)
+            index.set_sync_state(state)
+        else:
+            logger.info(f"Resuming index sync after {state['written']} documents")
+
+        written: int = state["written"]
+        while True:
+            params: dict[str, Any] = {}
+            if state["updated_after"]:
+                params["updatedAfter"] = state["updated_after"]
+            if state["cursor"]:
+                params["pageCursor"] = state["cursor"]
+            page = self._fetch_page_paced(params, pacer, report, written)
+            if page is None:
+                logger.info(f"Index sync paused after {written} documents")
+                return written
+
+            articles = [self._convert_document_to_dict(doc) for doc in page.results]
+            written += index.upsert_many(articles)
+            state["cursor"] = page.next_page_cursor
+            state["written"] = written
+            if not state["cursor"]:
+                break
+            index.set_sync_state(state)
+            report(SyncProgress(written=written))
+            self._stop_sync.wait(pacer.interval)
+
+        if state["full"]:
+            removed = index.prune_indexed_before(state["started"])
             if removed:
                 logger.info(f"Index sync removed {removed} stale documents")
-        self.index.mark_synced(started)
-        logger.info(f"Index sync wrote {written} documents (full={full})")
+        index.mark_synced(datetime.datetime.fromisoformat(state["started"]))
+        index.clear_sync_state()
+        logger.info(f"Index sync wrote {written} documents (full={state['full']})")
+        report(SyncProgress(written=written, done=True))
         return written
 
     def get_archive(
@@ -1270,6 +1413,8 @@ class ReadwiseClient:
 
     def close(self) -> None:
         """Close the client and clean up resources."""
+        # Stop a background index sync; its cursor is saved for the next run
+        self._stop_sync.set()
         try:
             self._executor.shutdown(wait=False)
         except RuntimeError as e:

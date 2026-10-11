@@ -263,12 +263,36 @@ class TestDocumentIndex:
         )
         assert index.category_counts() == [("article", DOC_COUNT_2), ("unknown", 1)]
 
-    def test_prune_except(self, index: DocumentIndex) -> None:
-        """Documents not in the keep set are removed."""
+    def test_prune_indexed_before(self, index: DocumentIndex) -> None:
+        """Documents last written before the cutoff are removed."""
         index.upsert_many([_article("a"), _article("b"), _article("c")])
-        removed = index.prune_except(["a"])
+        index._conn.execute(
+            "UPDATE documents SET indexed_at = '2000-01-01T00:00:00+00:00' "
+            "WHERE id IN ('a', 'b')"
+        )
+        removed = index.prune_indexed_before("2020-01-01T00:00:00+00:00")
         assert removed == DOC_COUNT_2
-        assert index.count() == 1
+        assert index.get("c") is not None
+
+    def test_sync_state_roundtrip(self, index: DocumentIndex) -> None:
+        """Unfinished sync state is stored, read back and cleared."""
+        assert index.get_sync_state() is None
+        state = {"cursor": "abc", "written": 100, "full": True}
+        index.set_sync_state(state)
+        assert index.get_sync_state() == state
+        index.clear_sync_state()
+        assert index.get_sync_state() is None
+
+    def test_sync_state_ignores_corrupt_value(self, index: DocumentIndex) -> None:
+        """A corrupt stored state reads as no state."""
+        index.set_meta("sync_state", "{not json")
+        assert index.get_sync_state() is None
+
+    def test_clear_removes_sync_state(self, index: DocumentIndex) -> None:
+        """clear() also forgets an unfinished sync."""
+        index.set_sync_state({"cursor": "abc"})
+        index.clear()
+        assert index.get_sync_state() is None
 
     def test_last_sync_roundtrip(self, index: DocumentIndex) -> None:
         """The sync marker is stored and parsed back."""
