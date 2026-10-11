@@ -10,6 +10,7 @@ import requests
 
 from rwreader.client import ReadwiseClient, create_readwise_client
 from rwreader.index import DocumentIndex
+from rwreader.sync import AdaptivePacer, SyncProgress
 
 # Test constants
 CACHE_EXPIRY_SECONDS = 3600
@@ -24,6 +25,51 @@ MONTH_DAYS_MIN = 30
 MONTH_DAYS_MAX = 31
 YEAR_DAYS_MIN = 364
 YEAR_DAYS_MAX = 365
+# Index sync tests
+SYNCED_FIRST_PAGE = 2
+SYNCED_TOTAL = 3
+CALLS_AFTER_ONE_RATE_LIMIT = 2
+CALLS_UNTIL_GIVE_UP = 6  # first try + 5 retries
+
+
+def _list_page(ids: list[str], cursor: str | None) -> Mock:
+    """Build a mocked ``/list/`` response holding documents with ``ids``."""
+    results = [
+        {
+            "id": doc_id,
+            "url": f"https://readwise.io/{doc_id}",
+            "title": f"Doc {doc_id}",
+            "author": None,
+            "source": None,
+            "category": "article",
+            "location": "new",
+            "tags": None,
+            "site_name": None,
+            "word_count": 10,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "notes": None,
+            "published_date": None,
+            "summary": None,
+            "image_url": None,
+            "content": None,
+            "source_url": None,
+            "parent_id": None,
+            "saved_at": "2026-01-01T00:00:00Z",
+            "last_moved_at": "2026-01-01T00:00:00Z",
+            "reading_progress": 0,
+            "first_opened_at": None,
+            "last_opened_at": None,
+        }
+        for doc_id in ids
+    ]
+    response = Mock(status_code=200, headers={})
+    response.json.return_value = {
+        "count": len(results),
+        "nextPageCursor": cursor,
+        "results": results,
+    }
+    return response
 
 
 @pytest.fixture
@@ -581,47 +627,129 @@ class TestReadwiseClient:
                 assert client.move_to_archive("doc_123") is True
 
     @patch("rwreader.client.ReadwiseReader")
-    def test_sync_index_full_then_incremental(
-        self, mock_api_class: Mock, mock_document: Mock
-    ) -> None:
-        """First sync fetches everything and prunes; later syncs pass updated_after."""
+    def test_sync_index_full_then_incremental(self, mock_api_class: Mock) -> None:
+        """A full sync pages through, prunes and records the sync time."""
         with patch.dict("os.environ", {}, clear=True):
-            mock_api = mock_api_class.return_value
-            mock_api.get_documents.return_value = [mock_document]
-
+            mock_api_class.return_value.URL_BASE = "https://readwise.io/api/v3"
             index = DocumentIndex(":memory:")
             index.upsert_many([{"id": "stale", "title": "gone remotely"}])
             client = ReadwiseClient(token="test_token", index=index)
+            pages = [_list_page(["a", "b"], "cur1"), _list_page(["c"], None)]
 
-            written = client.sync_index()
-            assert written == 1
-            mock_api.get_documents.assert_called_with(updated_after=None)
+            with patch("rwreader.client.requests.get", side_effect=pages) as get:
+                written = client.sync_index(pacer=AdaptivePacer(interval=0))
+
+            assert written == SYNCED_TOTAL
+            assert get.call_args_list[0].kwargs["params"] == {}
+            assert get.call_args_list[1].kwargs["params"] == {"pageCursor": "cur1"}
             assert index.get("stale") is None
+            assert index.get("c") is not None
             assert index.last_sync is not None
+            assert index.get_sync_state() is None
 
             first_sync = index.last_sync
-            written = client.sync_index()
-            assert written == 1
-            kwargs = mock_api.get_documents.call_args.kwargs
-            assert kwargs["updated_after"] == first_sync
+            with patch(
+                "rwreader.client.requests.get", return_value=_list_page(["a"], None)
+            ) as get:
+                assert client.sync_index(pacer=AdaptivePacer(interval=0)) == 1
+            params = get.call_args.kwargs["params"]
+            assert params["updatedAfter"] == first_sync.isoformat()
+            assert index.get("b") is not None  # incremental sync never prunes
             client.close()
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_sync_index_backs_off_on_rate_limit(self, mock_api_class: Mock) -> None:
+        """A 429 slows the pacer down and the same page is retried."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api_class.return_value.URL_BASE = "https://readwise.io/api/v3"
+            client = ReadwiseClient(token="test_token", index=DocumentIndex())
+            limited = Mock(status_code=429, headers={"Retry-After": "0"})
+            pacer = AdaptivePacer(interval=0.001)
+            updates: list[SyncProgress] = []
+
+            with patch(
+                "rwreader.client.requests.get",
+                side_effect=[limited, _list_page(["a"], None)],
+            ) as get:
+                written = client.sync_index(
+                    full=True, progress=updates.append, pacer=pacer
+                )
+
+            assert written == 1
+            assert get.call_count == CALLS_AFTER_ONE_RATE_LIMIT
+            assert pacer.interval == pytest.approx(0.002)
+            assert updates[0].reason == "rate limited"
+            assert updates[0].waiting > 0
+            assert updates[-1].done is True
+            client.close()
+
+    @patch("rwreader.client.ReadwiseReader")
+    def test_sync_index_resumes_after_stop(self, mock_api_class: Mock) -> None:
+        """Stopping keeps the cursor; the next sync continues from it."""
+        with patch.dict("os.environ", {}, clear=True):
+            mock_api_class.return_value.URL_BASE = "https://readwise.io/api/v3"
+            index = DocumentIndex(":memory:")
+            first = ReadwiseClient(token="test_token", index=index)
+
+            def stop_after_first_page(update: SyncProgress) -> None:
+                first._stop_sync.set()
+
+            with patch(
+                "rwreader.client.requests.get",
+                return_value=_list_page(["a", "b"], "cur1"),
+            ):
+                written = first.sync_index(
+                    full=True,
+                    progress=stop_after_first_page,
+                    pacer=AdaptivePacer(interval=0),
+                )
+            assert written == SYNCED_FIRST_PAGE
+            state = index.get_sync_state()
+            assert state is not None
+            assert state["cursor"] == "cur1"
+            assert index.last_sync is None
+
+            second = ReadwiseClient(token="test_token", index=index)
+            with patch(
+                "rwreader.client.requests.get", return_value=_list_page(["c"], None)
+            ) as get:
+                assert (
+                    second.sync_index(pacer=AdaptivePacer(interval=0)) == SYNCED_TOTAL
+                )
+            assert get.call_args.kwargs["params"] == {"pageCursor": "cur1"}
+            assert index.get_sync_state() is None
+            assert index.last_sync is not None
+            assert {"a", "b", "c"} <= {d["id"] for d in index.query()}
+            second.close()
 
     @patch("rwreader.client.ReadwiseReader")
     def test_sync_index_without_index(self, mock_api_class: Mock) -> None:
         """Sync is a no-op when no index is attached."""
         with patch.dict("os.environ", {}, clear=True):
             client = ReadwiseClient(token="test_token")
-            assert client.sync_index() == 0
-            mock_api_class.return_value.get_documents.assert_not_called()
+            with patch("rwreader.client.requests.get") as get:
+                assert client.sync_index() == 0
+            get.assert_not_called()
 
     @patch("rwreader.client.ReadwiseReader")
-    def test_sync_index_propagates_api_error(self, mock_api_class: Mock) -> None:
-        """API failures during sync are raised to the caller."""
+    def test_sync_index_gives_up_after_repeated_failures(
+        self, mock_api_class: Mock
+    ) -> None:
+        """Persistent network errors are raised after a few retries."""
         with patch.dict("os.environ", {}, clear=True):
-            mock_api_class.return_value.get_documents.side_effect = RuntimeError("x")
-            client = ReadwiseClient(token="test_token", index=DocumentIndex())
-            with pytest.raises(RuntimeError):
-                client.sync_index()
+            mock_api_class.return_value.URL_BASE = "https://readwise.io/api/v3"
+            index = DocumentIndex()
+            client = ReadwiseClient(token="test_token", index=index)
+            with (
+                patch(
+                    "rwreader.client.requests.get",
+                    side_effect=requests.ConnectionError("down"),
+                ) as get,
+                pytest.raises(requests.ConnectionError),
+            ):
+                client.sync_index(pacer=AdaptivePacer(interval=0))
+            assert get.call_count == CALLS_UNTIL_GIVE_UP
+            assert index.get_sync_state() is not None  # resumable
             client.close()
 
     @patch("rwreader.client.ReadwiseReader")

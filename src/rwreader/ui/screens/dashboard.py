@@ -3,27 +3,34 @@
 Everything here reads from the local :class:`~rwreader.index.DocumentIndex`
 (see ``rwreader.index``) rather than the API, so it stays fast even for large
 libraries. If the index is disabled in configuration, the dashboard says so
-and shows empty tables. Pressing ``s`` runs a full sync (fetches every
-document from the API once, independent of which categories have been
-browsed) before refreshing the tables.
+and shows empty tables. Pressing ``s`` starts a full sync in the background
+(fetches every document from the API, independent of which categories have
+been browsed). The sync is paced below the API rate limit, keeps running when
+the dashboard is closed, resumes after a restart and refreshes the dashboard
+when it completes.
 """
 
-import asyncio
 import logging
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, ClassVar
 
-from textual import work
-from textual.app import ComposeResult
+from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
 
 from ...index import DocumentIndex
+from ...sync import SyncProgress
 from .article_list import ArticleListScreen
 
 logger = logging.getLogger(__name__)
+
+# Worker group for the background index sync (one at a time)
+SYNC_WORKER_GROUP = "index-sync"
+# Show a progress notification every this many synced documents
+_SYNC_NOTIFY_EVERY = 1000
 
 _WORDS_PER_MINUTE = 200
 
@@ -197,9 +204,15 @@ class DashboardScreen(Screen):
         sync_text = (
             last_sync.astimezone().strftime("%Y-%m-%d %H:%M") if last_sync else "never"
         )
+        pending = index.get_sync_state()
+        sync_hint = (
+            f"sync in progress ({pending.get('written', 0)} fetched)"
+            if pending
+            else "press 's' to sync now"
+        )
         status.update(
-            f"{index.count()} documents indexed  |  last full sync: {sync_text}  |  "
-            "press 's' to sync now, ',' to refresh"
+            f"{index.count()} documents indexed  |  last sync: {sync_text}  |  "
+            f"{sync_hint}, ',' to refresh"
         )
         self._populate_overview(index)
         self._bucket_articles = self._populate_aging(index)
@@ -310,9 +323,8 @@ class DashboardScreen(Screen):
         """Recompute the tables from the index without hitting the API."""
         self.refresh_dashboard()
 
-    @work
-    async def action_sync(self) -> None:
-        """Fully sync the local index from the API, then refresh the tables."""
+    def action_sync(self) -> None:
+        """Start a full index sync in the background."""
         client = getattr(self.app, "client", None)
         index = getattr(client, "index", None) if client is not None else None
         if client is None or index is None:
@@ -320,17 +332,23 @@ class DashboardScreen(Screen):
                 "Local index not available", severity="warning", title="Dashboard"
             )
             return
-
-        self.notify("Syncing full library…", title="Dashboard")
-        loop = asyncio.get_event_loop()
-        try:
-            written = await loop.run_in_executor(None, client.sync_index, True)
-        except Exception as e:  # noqa: BLE001 - keep the TUI running
-            logger.error(f"Dashboard sync failed: {e}")
-            self.notify(f"Sync failed: {e}", severity="error", title="Dashboard")
+        if any(w.group == SYNC_WORKER_GROUP and w.is_running for w in self.app.workers):
+            self.notify("Sync already running in the background", title="Dashboard")
             return
-        self.refresh_dashboard()
-        self.notify(f"Synced {written} documents", title="Dashboard")
+
+        self.notify(
+            "Syncing full library in the background. This can take a while "
+            "for large libraries; you can keep using the app.",
+            title="Dashboard",
+        )
+        # Run on the app, not this screen, so closing the dashboard keeps it going
+        self.app.run_worker(
+            partial(run_background_sync, self.app, client),
+            name="index sync",
+            group=SYNC_WORKER_GROUP,
+            thread=True,
+            exit_on_error=False,
+        )
 
     def action_back(self) -> None:
         """Return to the category list."""
@@ -351,3 +369,60 @@ class DashboardScreen(Screen):
     def action_quit(self) -> None:
         """Quit the application."""
         self.app.exit()
+
+
+def _notify_from_thread(app: App, message: str, **kwargs: Any) -> None:
+    """Post a notification from the sync thread; ignore it if the app is gone."""
+    try:
+        app.call_from_thread(app.notify, message, title="Sync", **kwargs)
+    except RuntimeError:
+        logger.debug(f"Dropped sync notification: {message}")
+
+
+def run_background_sync(app: App, client: Any) -> None:
+    """Run a full, paced index sync and report progress as notifications.
+
+    Runs in a worker thread. Stopping the client (app exit) pauses the sync;
+    the next sync resumes from the saved cursor.
+
+    Args:
+        app: The running app, for notifications and refreshing the dashboard.
+        client: The ReadwiseClient whose index is synced.
+    """
+    state = {"done": False, "next_note": _SYNC_NOTIFY_EVERY}
+
+    def on_progress(update: SyncProgress) -> None:
+        if update.done:
+            state["done"] = True
+        elif update.waiting:
+            _notify_from_thread(
+                app,
+                f"Sync {update.reason or 'paused'}: slowing down, next request "
+                f"in {update.waiting:.0f}s ({update.written} documents so far)",
+            )
+        elif update.written >= state["next_note"]:
+            state["next_note"] = update.written + _SYNC_NOTIFY_EVERY
+            _notify_from_thread(app, f"Synced {update.written} documents so far…")
+
+    try:
+        written = client.sync_index(True, progress=on_progress)
+    except Exception as e:  # noqa: BLE001 - background worker; report, don't crash
+        logger.error(f"Background index sync failed: {e}")
+        _notify_from_thread(
+            app,
+            f"Sync failed: {e}. Press 's' to resume.",
+            severity="error",
+        )
+        return
+    if not state["done"]:
+        return  # Stopped (app exiting) or another sync was already running
+
+    def finished() -> None:
+        app.notify(f"Sync complete: {written} documents", title="Sync")
+        if isinstance(app.screen, DashboardScreen):
+            app.screen.refresh_dashboard()
+
+    try:
+        app.call_from_thread(finished)
+    except RuntimeError:
+        logger.debug("Sync finished after the app stopped")

@@ -1,7 +1,8 @@
 """Tests for the dashboard screen and its pure helper functions."""
 
 import datetime
-from collections.abc import Generator
+import threading
+from collections.abc import Callable, Generator
 from unittest.mock import Mock
 
 import pytest
@@ -10,8 +11,10 @@ from textual.coordinate import Coordinate
 from textual.widgets import DataTable
 
 from rwreader.index import DocumentIndex
+from rwreader.sync import SyncProgress
 from rwreader.ui.screens.article_list import ArticleListScreen
 from rwreader.ui.screens.dashboard import (
+    SYNC_WORKER_GROUP,
     DashboardScreen,
     age_bucket_label,
     days_since,
@@ -309,17 +312,58 @@ class TestDashboardScreen:
     async def test_sync_action_calls_client_and_refreshes(
         self, populated_index: DocumentIndex
     ) -> None:
-        """Pressing 's' runs a full sync and refreshes the tables."""
+        """Pressing 's' starts a background full sync that reports completion."""
+
+        def fake_sync(full: bool, progress: Callable[[SyncProgress], None]) -> int:
+            progress(SyncProgress(written=7, done=True))
+            return 7
+
         client = Mock()
         client.index = populated_index
-        client.sync_index = Mock(return_value=7)
+        client.sync_index = Mock(side_effect=fake_sync)
         app = _HostApp(client=client)
         async with app.run_test() as pilot:
             app.push_screen(DashboardScreen())
             await pilot.pause()
             await pilot.press("s")
-            await pilot.pause(0.3)
-            client.sync_index.assert_called_once_with(True)
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            client.sync_index.assert_called_once()
+            assert client.sync_index.call_args.args == (True,)
+            messages = [n.message for n in app._notifications]
+            assert "Sync complete: 7 documents" in messages
+
+    @pytest.mark.asyncio
+    async def test_sync_runs_once_and_survives_leaving_dashboard(
+        self, populated_index: DocumentIndex
+    ) -> None:
+        """A second 's' does not start another sync; closing the screen keeps it."""
+        release = threading.Event()
+
+        def slow_sync(full: bool, progress: Callable[[SyncProgress], None]) -> int:
+            release.wait(5)
+            progress(SyncProgress(written=1, done=True))
+            return 1
+
+        client = Mock()
+        client.index = populated_index
+        client.sync_index = Mock(side_effect=slow_sync)
+        app = _HostApp(client=client)
+        async with app.run_test() as pilot:
+            app.push_screen(DashboardScreen())
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            app.pop_screen()
+            await pilot.pause()
+            running = [w for w in app.workers if w.group == SYNC_WORKER_GROUP]
+            assert running
+            assert running[0].is_running
+            release.set()
+            await app.workers.wait_for_complete()
+            client.sync_index.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_sync_action_without_index_warns(self) -> None:

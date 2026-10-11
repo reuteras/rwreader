@@ -30,7 +30,9 @@ Reads from a local index of document metadata, kept up to date as you browse.
   row (a location, an age bucket, a source or a tag)
 - **,**: Recompute the tables from the local index (no API calls)
 - **s**: Full sync — fetch every document from the API once, so locations
-  you have not browsed yet (e.g. an unvisited Archive) are included
+  you have not browsed yet (e.g. an unvisited Archive) are included. Runs in
+  the background below the API rate limit (slowing down if it is hit), keeps
+  going when you leave the dashboard and resumes after a restart
 - **Escape / Backspace**: Back to category list
 
 ## Article List Screen
