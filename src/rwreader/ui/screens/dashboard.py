@@ -60,7 +60,6 @@ _AGE_BUCKETS: tuple[tuple[str, int, int], ...] = (
     ("30+ days", 31, 10**6),
 )
 
-_MAX_SOURCES = 30
 _MAX_TAGS = 100
 _MAX_AGING_DOCS = 5000
 
@@ -261,10 +260,10 @@ class DashboardScreen(Screen):
         return buckets
 
     def _populate_sources(self, index: DocumentIndex) -> None:
-        """Fill the Sources table with the most common sites."""
+        """Fill the Sources table with every site, most common first."""
         table = self.query_one("#sources-table", DataTable)
         table.clear()
-        for site, total, unread in index.site_counts_with_unread(limit=_MAX_SOURCES):
+        for site, total, unread in index.site_counts_with_unread():
             table.add_row(site, str(total), str(unread), key=site)
 
     def _populate_tags(self, index: DocumentIndex) -> None:
