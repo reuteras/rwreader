@@ -6,6 +6,7 @@ from collections.abc import Generator
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from rwreader.client import ReadwiseClient, create_readwise_client
 from rwreader.index import DocumentIndex
@@ -61,12 +62,14 @@ class TestCreateReadwiseClient:
     @pytest.mark.asyncio
     async def test_create_readwise_client(self) -> None:
         """Test creating ReadwiseClient asynchronously."""
-        with patch.dict("os.environ", {}, clear=True):
-            with patch("rwreader.client.ReadwiseReader"):
-                client = await create_readwise_client(token="test_token")
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("rwreader.client.ReadwiseReader"),
+        ):
+            client = await create_readwise_client(token="test_token")
 
-                assert isinstance(client, ReadwiseClient)
-                assert client.token == "test_token"
+            assert isinstance(client, ReadwiseClient)
+            assert client.token == "test_token"
 
 
 class TestReadwiseClient:
@@ -221,7 +224,7 @@ class TestReadwiseClient:
         with patch.dict("os.environ", {}, clear=True):
             client = ReadwiseClient(token="test_token")
 
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(datetime.UTC)
 
             day_date = client._get_date_for_timeframe("day")
             # Check within a small margin for timing issues
@@ -476,7 +479,7 @@ class TestReadwiseClient:
             mock_patch.return_value = Mock(status_code=400, text="bad request")
             assert client.move_to_shortlist("article_123") is False
 
-            mock_patch.side_effect = ConnectionError("down")
+            mock_patch.side_effect = requests.ConnectionError("down")
             assert client.move_to_shortlist("article_123") is False
 
     @patch("rwreader.client.readwise.update_document_location")
@@ -509,7 +512,7 @@ class TestReadwiseClient:
     def test_delete_article_failure(self, mock_api: Mock, mock_delete: Mock) -> None:
         """Test failed delete operation."""
         with patch.dict("os.environ", {}, clear=True):
-            mock_delete.side_effect = Exception("API error")
+            mock_delete.side_effect = requests.ConnectionError("API error")
 
             client = ReadwiseClient(token="test_token")
             success = client.delete_article("article_123")

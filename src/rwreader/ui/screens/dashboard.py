@@ -16,6 +16,7 @@ from typing import Any, ClassVar
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
 
@@ -83,7 +84,7 @@ def _parse_timestamp(value: str) -> datetime | None:
         stripped = value.strip()
         if stripped.replace(".", "", 1).isdigit():
             return datetime.fromtimestamp(float(stripped), tz=UTC)
-        return datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        return datetime.fromisoformat(stripped)
     except (ValueError, OverflowError, OSError):
         return None
 
@@ -164,7 +165,7 @@ class DashboardScreen(Screen):
         """Focus the table in the tab that just became active."""
         try:
             event.pane.query_one(DataTable).focus()
-        except Exception as e:
+        except NoMatches as e:
             logger.debug(f"Could not focus table in activated tab: {e}")
 
     # ── Data loading ─────────────────────────────────────────────────────
@@ -324,7 +325,7 @@ class DashboardScreen(Screen):
         loop = asyncio.get_event_loop()
         try:
             written = await loop.run_in_executor(None, client.sync_index, True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - keep the TUI running
             logger.error(f"Dashboard sync failed: {e}")
             self.notify(f"Sync failed: {e}", severity="error", title="Dashboard")
             return

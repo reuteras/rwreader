@@ -1,6 +1,7 @@
 """Tests for the config module."""
 
 import subprocess
+from importlib import metadata
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -255,7 +256,7 @@ class TestConfiguration:
         self, mock_version: MagicMock, mock_config_file: Path
     ) -> None:
         """Test version fallback when metadata.version fails."""
-        mock_version.side_effect = Exception("Package not found")
+        mock_version.side_effect = metadata.PackageNotFoundError("rwreader")
 
         config = Configuration(exec_args=["--config", str(mock_config_file)])
 
@@ -289,13 +290,13 @@ class TestConfiguration:
             config = Configuration(exec_args=["--config", str(temp_config_path)])
 
             # Mock exists to return False and mkdir to raise PermissionError
-            with patch("pathlib.Path.exists", return_value=False):
-                with patch(
-                    "pathlib.Path.mkdir", side_effect=PermissionError("No access")
-                ):
-                    with pytest.raises(SystemExit) as excinfo:
-                        config.create_default_config(
-                            str(tmp_path / "newdir" / "config.toml")
-                        )
+            with (
+                patch("pathlib.Path.exists", return_value=False),
+                patch("pathlib.Path.mkdir", side_effect=PermissionError("No access")),
+            ):
+                with pytest.raises(SystemExit) as excinfo:
+                    config.create_default_config(
+                        str(tmp_path / "newdir" / "config.toml")
+                    )
 
-                    assert excinfo.value.code == 1
+                assert excinfo.value.code == 1

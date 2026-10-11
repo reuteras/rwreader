@@ -40,13 +40,9 @@ class ConfirmScreen(ModalScreen):
         self.message: str = message
         self.on_confirm = on_confirm
         self.data: str = data
-        self.variant: (
-            Literal["default"]
-            | Literal["primary"]
-            | Literal["success"]
-            | Literal["warning"]
-            | Literal["error"]
-        ) = variant
+        self.variant: Literal["default", "primary", "success", "warning", "error"] = (
+            variant
+        )
 
     def compose(self) -> ComposeResult:
         """Define the content layout of the confirmation screen."""
@@ -73,7 +69,7 @@ class ConfirmScreen(ModalScreen):
         if self.on_confirm:
             try:
                 self.on_confirm(self.data)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - arbitrary callback; report instead of crashing
                 self.app.notify(message=f"Error: {e}", title="Error", severity="error")
 
         self.dismiss(result=result)

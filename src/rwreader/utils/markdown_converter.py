@@ -2,7 +2,7 @@
 
 import logging
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from http import HTTPStatus
 from urllib.parse import quote, urlparse
 
@@ -42,12 +42,10 @@ def _is_private_ip(ip_parts: list[str]) -> bool:
         and _PRIVATE_NET_172_MIN_SECOND <= second <= _PRIVATE_NET_172_MAX_SECOND
     ):
         return True
-    if (
+    return (
         first == _PRIVATE_NET_192_FIRST_OCTET
         and second == _PRIVATE_NET_168_SECOND_OCTET
-    ):
-        return True
-    return False
+    )
 
 
 def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
@@ -112,7 +110,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
         # Fallback to simple string extraction if markdownify fails
         try:
             markdown_text = md(html=str(object=soup))
-        except Exception as conv_error:
+        except Exception as conv_error:  # noqa: BLE001 - arbitrary HTML; fall back to text
             logger.error(
                 msg=f"Markdownify error: {conv_error}, falling back to basic text extraction"
             )
@@ -120,7 +118,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
             # Try to extract text from the soup object
             try:
                 markdown_text = soup.get_text(separator="\n\n")
-            except Exception as soup_error:
+            except Exception as soup_error:  # noqa: BLE001 - last fallback is raw content
                 logger.error(
                     msg=f"Soup.get_text error: {soup_error}, using raw content as fallback"
                 )
@@ -141,7 +139,7 @@ def render_html_to_markdown(html_content: str) -> str:  # noqa: PLR0911, PLR0912
         return markdown_text
 
     except Exception as e:
-        logger.error(msg=f"Error converting HTML to markdown: {e}", exc_info=True)
+        logger.exception(msg=f"Error converting HTML to markdown: {e}")
         # Try a very basic fallback if BeautifulSoup fails
         try:
             # First attempt: Just remove HTML tags with regex and return as plain text
@@ -310,11 +308,11 @@ def extract_links(content: str) -> list[tuple[str, str]]:
                     if not text:
                         text = href
                     links.append((text, href))
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 logger.debug(msg=f"Error processing link: {e}")
 
         return links
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - arbitrary HTML; return links found so far
         logger.error(msg=f"Error extracting links: {e}")
         return links
 
@@ -342,7 +340,7 @@ def escape_markdown_formatting(text: str) -> str:
     return text
 
 
-def format_timestamp(timestamp: str | int | float | None) -> str:
+def format_timestamp(timestamp: str | float | None) -> str:
     """Convert timestamp to a human-readable format using the current locale.
 
     Args:
@@ -369,14 +367,14 @@ def format_timestamp(timestamp: str | int | float | None) -> str:
                 timestamp_val = timestamp_val / 1000
 
             # Convert from seconds to datetime
-            dt: datetime = datetime.fromtimestamp(timestamp_val)
+            dt: datetime = datetime.fromtimestamp(timestamp_val, tz=UTC).astimezone()
         else:
             # Try to parse as ISO format
-            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(timestamp_str)
 
         # Format based on locale
         return dt.strftime("%c")
-    except Exception as e:
+    except (ValueError, TypeError, OverflowError, OSError) as e:
         logger.error(msg=f"Error formatting timestamp '{timestamp}': {e}")
         return str(object=timestamp) if timestamp else ""
 

@@ -1,16 +1,13 @@
 """Category list screen for Readwise Reader."""
 
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header, ListItem, ListView, Static
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +174,7 @@ class CategoryListScreen(Screen):
             self.app.call_from_thread(self.notify, "Categories loaded", title="Success")
 
         except Exception as e:
-            logger.error(f"Error loading categories: {e}", exc_info=True)
+            logger.exception("Error loading categories")
             self.app.call_from_thread(
                 self.notify, f"Error loading categories: {e}", severity="error"
             )
@@ -237,8 +234,8 @@ class CategoryListScreen(Screen):
                 list_view.index = 0
             logger.debug(f"List populated with {len(list_view.children)} items")
 
-        except Exception as e:
-            logger.error(f"Error in populate_list: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Error in populate_list")
             raise
 
     def action_cursor_down(self) -> None:
@@ -277,21 +274,21 @@ class CategoryListScreen(Screen):
     async def action_select_category(self) -> None:
         """Select category and push article list screen (fallback)."""
         list_view = self.query_one(ListView)
-        if list_view.highlighted_child:
-            # Extract category name from ListItem data
-            if (
-                hasattr(list_view.highlighted_child, "data")
-                and list_view.highlighted_child.data
-            ):
-                category = list_view.highlighted_child.data.get("category")
-                if category:
-                    # Import and push ArticleListScreen
-                    from .article_list import ArticleListScreen  # noqa: PLC0415
+        # Extract category name from ListItem data
+        if (
+            list_view.highlighted_child
+            and hasattr(list_view.highlighted_child, "data")
+            and list_view.highlighted_child.data
+        ):
+            category = list_view.highlighted_child.data.get("category")
+            if category:
+                # Import and push ArticleListScreen
+                from .article_list import ArticleListScreen  # noqa: PLC0415
 
-                    self.app.push_screen(
-                        ArticleListScreen(category=category),
-                        self._on_article_list_dismissed,
-                    )
+                self.app.push_screen(
+                    ArticleListScreen(category=category),
+                    self._on_article_list_dismissed,
+                )
 
     def action_dashboard(self) -> None:
         """Open the library dashboard."""
