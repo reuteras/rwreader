@@ -1,0 +1,6 @@
+# Used by super-linter, which runs ruff with an explicit --config and would
+# otherwise ignore [tool.ruff] in pyproject.toml.
+extend = "../../pyproject.toml"
+
+# Store the cache outside the workspace (as in super-linter's default config)
+cache-dir = "/tmp/.ruff_cache"
