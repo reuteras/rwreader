@@ -856,3 +856,43 @@ class TestReadwiseClient:
             mock_api.get_documents.assert_called_once()
             assert len(articles) == 1
             assert articles[0]["id"] == "doc_123"
+
+
+class TestMarkSeen:
+    """Tests for ReadwiseClient.mark_seen."""
+
+    @patch("rwreader.client.readwise.update_document_seen")
+    @patch("rwreader.client.ReadwiseReader")
+    def test_mark_seen_updates_cache_and_index(
+        self, mock_api: Mock, mock_update: Mock
+    ) -> None:
+        """A successful call updates the article cache and the local index."""
+        mock_update.return_value = (True, {})
+        index = DocumentIndex(":memory:")
+        index.upsert_many([{"id": "a1", "location": "archive", "first_opened_at": ""}])
+        client = ReadwiseClient(token="test_token", index=index)
+        client._article_cache["a1"] = {"id": "a1", "first_opened_at": ""}
+
+        assert client.mark_seen("a1") is True
+        mock_update.assert_called_once_with(document_id="a1", seen=True)
+        assert client._article_cache["a1"]["first_opened_at"]
+        assert index.query(unread_only=True) == []
+
+        assert client.mark_seen("a1", seen=False) is True
+        assert client._article_cache["a1"]["first_opened_at"] == ""
+        assert [d["id"] for d in index.query(unread_only=True)] == ["a1"]
+
+    @patch("rwreader.client.readwise.update_document_seen")
+    @patch("rwreader.client.ReadwiseReader")
+    def test_mark_seen_failure_leaves_state(
+        self, mock_api: Mock, mock_update: Mock
+    ) -> None:
+        """A failed or raising API call returns False and changes nothing."""
+        mock_update.return_value = (False, {"error": "nope"})
+        client = ReadwiseClient(token="test_token")
+        client._article_cache["a1"] = {"id": "a1", "first_opened_at": ""}
+        assert client.mark_seen("a1") is False
+        assert client._article_cache["a1"]["first_opened_at"] == ""
+
+        mock_update.side_effect = requests.ConnectionError("down")
+        assert client.mark_seen("a1") is False

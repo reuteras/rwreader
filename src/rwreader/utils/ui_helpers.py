@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from ..utils.markdown_converter import (
@@ -11,6 +12,12 @@ from ..utils.markdown_converter import (
 )
 
 logger: logging.Logger = logging.getLogger(name=__name__)
+
+
+def _now_iso() -> str:
+    """Return the current UTC time in ISO 8601 format."""
+    return datetime.now(tz=UTC).isoformat()
+
 
 _HTML_CONTENT_FIELDS: list[str] = [
     "html_content",
@@ -448,3 +455,32 @@ def move_article_to_destination(
     except Exception as e:  # noqa: BLE001 - report failure to the UI instead of crashing
         logger.error(msg=f"Error moving article: {e}")
         return False, f"Error: {e}"
+
+
+def set_article_seen(
+    client: Any, article: dict[str, Any], seen: bool
+) -> tuple[bool, str]:
+    """Mark an article seen or unseen and update the article dict to match.
+
+    Args:
+        client: ReadwiseClient instance
+        article: Article dict; its ``first_opened_at`` is updated on success
+        seen: True to mark as seen (read), False to mark as unseen (unread)
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    if not hasattr(client, "mark_seen"):
+        return False, "API client not available"
+    state = "read" if seen else "unread"
+    try:
+        if not client.mark_seen(article_id=str(article.get("id")), seen=seen):
+            return False, f"Failed to mark as {state}"
+    except Exception as e:  # noqa: BLE001 - report failure to the UI instead of crashing
+        logger.error(msg=f"Error marking article {state}: {e}")
+        return False, f"Error: {e}"
+    if seen:
+        article["first_opened_at"] = article.get("first_opened_at") or _now_iso()
+    else:
+        article["first_opened_at"] = ""
+    return True, f"Marked as {state}"

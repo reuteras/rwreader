@@ -1149,6 +1149,49 @@ class ReadwiseClient:
             logger.error(msg=f"Error moving article {article_id} to shortlist: {e}")
             return False
 
+    def mark_seen(self, article_id: str, seen: bool = True) -> bool:
+        """Mark an article as seen (opened) or unseen in Readwise.
+
+        Seen sets ``first_opened_at`` / ``last_opened_at``; unseen clears them.
+
+        Args:
+            article_id: ID of the article to update
+            seen: True to mark as seen, False to mark as unseen
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            success, response = readwise.update_document_seen(
+                document_id=article_id, seen=seen
+            )
+        except _API_ERRORS as e:
+            logger.error(msg=f"Error marking article {article_id} seen={seen}: {e}")
+            return False
+        if not success:
+            logger.error(
+                msg=f"Failed to mark article {article_id} seen={seen}: {response}"
+            )
+            return False
+
+        now = datetime.datetime.now(tz=datetime.UTC).isoformat()
+        with self._cache_lock:
+            cached = self._article_cache.get(article_id)
+            if cached is not None:
+                if seen:
+                    cached["first_opened_at"] = cached.get("first_opened_at") or now
+                    cached["last_opened_at"] = now
+                else:
+                    cached["first_opened_at"] = ""
+                    cached["last_opened_at"] = ""
+        if self.index is not None:
+            try:
+                self.index.set_seen(article_id, seen)
+            except Exception as e:  # noqa: BLE001 - index is best-effort, never break the API path
+                logger.warning(f"Failed to update seen state in index: {e}")
+        self._invalidate_cache()
+        return True
+
     def delete_article(self, article_id: str) -> bool:
         """Delete an article from Readwise.
 

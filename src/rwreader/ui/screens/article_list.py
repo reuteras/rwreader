@@ -14,9 +14,22 @@ from ...utils.ui_helpers import (
     move_article_to_destination,
     safe_get_article_display_title,
     safe_set_text_style,
+    set_article_seen,
 )
 
 logger = logging.getLogger(__name__)
+
+# Index location names for the categories that support the unread-only view.
+# Feed is always unread-only and "custom" is a dashboard snapshot.
+_INDEX_LOCATIONS: dict[str, str] = {
+    "inbox": "new",
+    "later": "later",
+    "shortlist": "shortlist",
+    "archive": "archive",
+}
+
+# Rows read from the index per page in the unread-only view
+UNREAD_PAGE_SIZE = 100
 
 
 class ArticleListScreen(Screen):
@@ -31,6 +44,7 @@ class ArticleListScreen(Screen):
         Binding("i", "inbox_article", "Inbox"),
         Binding("s", "shortlist_article", "Shortlist"),
         Binding("D", "delete_article", "Delete"),
+        Binding("U", "toggle_seen", "Read/Unread"),
         Binding("o", "open_browser", "Open in browser"),
         Binding("O", "open_source_browser", "Open source URL"),
         Binding("comma", "refresh", "Refresh"),
@@ -38,6 +52,7 @@ class ArticleListScreen(Screen):
         Binding("backspace", "back", "Back", show=False),
         Binding("h", "help", "Help"),
         Binding("space", "load_more", "Load more"),
+        Binding("u", "toggle_unread", "Unread only"),
     ]
 
     def __init__(
@@ -69,11 +84,23 @@ class ArticleListScreen(Screen):
         self.initial_page_size = 20
         self.is_refreshing = False
         self.refresh_animation_step = 0
+        # Unread-only view: read from the local index (whole library) instead
+        # of the API, which for archive only covers recent documents.
+        self.unread_only = False
+        self.unread_limit = UNREAD_PAGE_SIZE
+        self.unread_total = 0
+
+    def _title_text(self) -> str:
+        """Return the heading text for the current mode."""
+        base = self.title_override or self.category.upper()
+        if self.unread_only:
+            return f"{base} - UNREAD ({len(self.articles)} of {self.unread_total})"
+        return base
 
     def compose(self) -> ComposeResult:
         """Create the article list UI."""
         yield Header(show_clock=True)
-        yield Static(self.title_override or self.category.upper(), id="category_title")
+        yield Static(self._title_text(), id="category_title")
         yield ListView(id="article_list")
         yield Footer()
 
@@ -114,7 +141,7 @@ class ArticleListScreen(Screen):
 
         # Create animated dots
         dots = "." * (self.refresh_animation_step % 4)
-        title_text = f"{self.category.upper()} - Refreshing{dots}"
+        title_text = f"{self._title_text()} - Refreshing{dots}"
 
         # Update the title
         title = self.query_one("#category_title", Static)
@@ -137,7 +164,7 @@ class ArticleListScreen(Screen):
         """Stop the refresh animation and restore title."""
         self.is_refreshing = False
         title = self.query_one("#category_title", Static)
-        title.update(f"{self.category.upper()}")
+        title.update(self._title_text())
 
     @work(exclusive=False, thread=True)
     async def load_articles(  # noqa: PLR0912
@@ -164,6 +191,10 @@ class ArticleListScreen(Screen):
             )
             if from_refresh:
                 self.app.call_from_thread(self._stop_refresh_animation)
+            return
+
+        if self.unread_only:
+            self._load_unread_from_index(sync=from_refresh)
             return
 
         try:
@@ -252,16 +283,62 @@ class ArticleListScreen(Screen):
             if from_refresh:
                 self.app.call_from_thread(self._stop_refresh_animation)
 
+    def _load_unread_from_index(self, sync: bool) -> None:
+        """Load never-opened documents for this category from the local index.
+
+        Runs in the ``load_articles`` worker thread.
+
+        Args:
+            sync: Fetch the category from the API first so recent changes
+                reach the index before it is queried. Set for a user refresh,
+                which also owns the refresh animation.
+        """
+        client = getattr(self.app, "client")  # noqa: B009 - App has no typed client
+        try:
+            if sync:
+                fetchers = {
+                    "inbox": client.get_inbox,
+                    "later": client.get_later,
+                    "shortlist": client.get_shortlist,
+                    "archive": client.get_archive,
+                }
+                fetchers[self.category](refresh=True)
+            location = _INDEX_LOCATIONS[self.category]
+            index = client.index
+            counts = index.count_by_location(unread_only=True)
+            self.unread_total = counts.get(location, 0)
+            self.articles = index.query(
+                location=location, unread_only=True, limit=self.unread_limit
+            )
+            self.app.call_from_thread(self.populate_list)
+        except Exception as e:  # noqa: BLE001 - keep the TUI running
+            logger.error(f"Error loading unread articles: {e}")
+            self.app.call_from_thread(
+                self.notify, f"Error loading articles: {e}", severity="error"
+            )
+        finally:
+            if sync:
+                self.app.call_from_thread(self._stop_refresh_animation)
+
     def _verify_articles(self) -> None:
         """Background verification of article list after initial load."""
         logger.debug(f"Running background verification of {self.category} articles")
         # Load again to check if list has changed (server-side cache may have cleared)
         self.load_articles(load_more=False, from_refresh=False, use_retry=False)
 
-    def populate_list(self) -> None:
-        """Populate ListView with articles."""
+    def populate_list(self, keep_cursor: bool | None = None) -> None:
+        """Populate ListView with articles.
+
+        Args:
+            keep_cursor: Keep the highlighted position instead of jumping to the
+                top. Defaults to on in the unread-only view, which is long and
+                paged, so loading more or returning from the reader keeps place.
+        """
         logger.debug(f"populate_list called with {len(self.articles)} articles")
         list_view = self.query_one("#article_list", ListView)
+        if keep_cursor is None:
+            keep_cursor = self.unread_only
+        cursor = (list_view.index or 0) if keep_cursor else 0
 
         # Remove all existing items explicitly to avoid duplicate IDs
         for child in list(list_view.children):
@@ -285,10 +362,12 @@ class ArticleListScreen(Screen):
 
             list_view.append(list_item)
 
-        # Focus the list and select first item
+        # Focus the list and select the requested item
         list_view.focus()
         if len(list_view.children) > 0:
-            list_view.index = 0
+            list_view.index = min(max(cursor, 0), len(list_view.children) - 1)
+        if self.unread_only:
+            self.query_one("#category_title", Static).update(self._title_text())
 
     def action_cursor_down(self) -> None:
         """Move cursor down."""
@@ -403,6 +482,31 @@ class ArticleListScreen(Screen):
         else:
             self.notify(message, severity="error")
 
+    def action_toggle_seen(self) -> None:
+        """Toggle the highlighted article between read (seen) and unread."""
+        list_view = self.query_one(ListView)
+        index = list_view.index
+        if index is None or not (0 <= index < len(self.articles)):
+            self.notify("No article selected", severity="warning")
+            return
+        if not hasattr(self.app, "client"):
+            self.notify("API client not available", severity="error")
+            return
+        article = self.articles[index]
+        seen = not article.get("first_opened_at")
+        success, message = set_article_seen(
+            client=self.app.client, article=article, seen=seen
+        )
+        if not success:
+            self.notify(message, severity="error")
+            return
+        self.notify(message, title="Success")
+        # Lists that only show unread articles drop it once it is read
+        if seen and (self.unread_only or self.category == "feed"):
+            self.articles.pop(index)
+            self.unread_total = max(self.unread_total - 1, 0)
+            self.populate_list(keep_cursor=True)
+
     @work
     async def action_delete_article(self) -> None:
         """Delete article (with confirmation)."""
@@ -505,10 +609,42 @@ class ArticleListScreen(Screen):
         if self.preset_articles is not None:
             self.notify("Not applicable in this view", title="Load more")
             return
+        if self.unread_only:
+            if len(self.articles) >= self.unread_total:
+                self.notify("All unread articles loaded", title="Load more")
+                return
+            self.unread_limit += UNREAD_PAGE_SIZE
         self.load_articles(load_more=True)
+
+    def action_toggle_unread(self) -> None:
+        """Toggle showing only never-opened articles, read from the local index."""
+        if self.preset_articles is not None or self.category not in _INDEX_LOCATIONS:
+            message = (
+                "Feed already shows unread articles only"
+                if self.category == "feed"
+                else "Not applicable in this view"
+            )
+            self.notify(message, title="Unread only")
+            return
+        client = getattr(self.app, "client", None)
+        if getattr(client, "index", None) is None:
+            self.notify(
+                "Unread-only view needs the local index (index_enabled = true)",
+                severity="warning",
+            )
+            return
+        self.unread_only = not self.unread_only
+        self.unread_limit = UNREAD_PAGE_SIZE
+        self.query_one("#article_list", ListView).index = 0
+        self.query_one("#category_title", Static).update(self._title_text())
+        self.load_articles(load_more=False)
 
     def action_back(self) -> None:
         """Go back to category list, passing back the current article count."""
+        if self.unread_only:
+            # The unread list is not the category total; leave the count alone.
+            self.dismiss({"category": self.category})
+            return
         self.dismiss({"category": self.category, "count": len(self.articles)})
 
     def action_help(self) -> None:

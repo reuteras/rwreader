@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'emscripten'",
@@ -1100,7 +1100,7 @@ wheels = [
 [[package]]
 name = "readwise-api"
 version = "0.5.0"
-source = { git = "https://github.com/reuteras/readwise-api.git#ca3385ef0003a6560fe09469c6429641f97bab8f" }
+source = { git = "https://github.com/reuteras/readwise-api.git#bddc2faecfe6f607fb55f87f39382ae568785bc1" }
 dependencies = [
     { name = "pydantic" },
     { name = "requests" },

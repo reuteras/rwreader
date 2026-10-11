@@ -30,7 +30,11 @@ from ...utils.highlight_manager import (
     inject_highlights_into_markdown,
     is_readwise_cli_available,
 )
-from ...utils.ui_helpers import format_article_content, move_article_to_destination
+from ...utils.ui_helpers import (
+    format_article_content,
+    move_article_to_destination,
+    set_article_seen,
+)
 from ..widgets.linkable_markdown_viewer import LinkableMarkdownViewer
 from .extract_screens import CodeBlockScreen, ExtractMenuScreen, IndicatorScreen
 from .link_screens import LinkSelectionScreen
@@ -49,6 +53,7 @@ class ArticleReaderScreen(Screen):
         Binding("i", "inbox", "Inbox"),
         Binding("s", "shortlist", "Shortlist"),
         Binding("D", "delete", "Delete"),
+        Binding("U", "toggle_seen", "Read/Unread"),
         Binding("o", "open_browser", "Open in Browser"),
         Binding("O", "open_source_browser", "Open Source URL"),
         Binding("ctrl+l", "show_links", "Links"),
@@ -175,6 +180,15 @@ class ArticleReaderScreen(Screen):
             )
             if cli_available:
                 self.fetch_highlights(article_id=article_id)
+
+            # Opening an article marks it seen, as in the Readwise apps
+            if not self.article.get("first_opened_at"):
+                opened = self._listed_article()
+                await loop.run_in_executor(
+                    None,
+                    lambda: set_article_seen(client=client, article=opened, seen=True),
+                )
+                self.article["first_opened_at"] = opened.get("first_opened_at", "")
 
         except TimeoutError:
             logger.error("Timeout loading article")
@@ -441,6 +455,28 @@ class ArticleReaderScreen(Screen):
     async def action_shortlist(self) -> None:
         """Move this article to Shortlist."""
         await self._move_article("shortlist")
+
+    def _listed_article(self) -> dict[str, Any]:
+        """Return the list entry for the current article (shared with the list)."""
+        if 0 <= self.current_index < len(self.article_list):
+            return self.article_list[self.current_index]
+        return self.article
+
+    def action_toggle_seen(self) -> None:
+        """Toggle the current article between read (seen) and unread."""
+        if not hasattr(self.app, "client"):
+            self.notify("API client not available", severity="error")
+            return
+        seen = not self.article.get("first_opened_at")
+        success, message = set_article_seen(
+            client=self.app.client, article=self.article, seen=seen
+        )
+        if success:
+            # Keep the list entry in step so the article list sees the change
+            self._listed_article()["first_opened_at"] = self.article["first_opened_at"]
+            self.notify(message, title="Success")
+        else:
+            self.notify(message, severity="error")
 
     async def _move_article(self, destination: str) -> None:
         """Move the current article to a destination.
