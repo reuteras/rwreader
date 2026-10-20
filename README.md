@@ -21,7 +21,7 @@ A modern, keyboard-driven terminal user interface (TUI) for [Readwise Reader](ht
 
 ### Prerequisites
 
-- Python 3.11+ (< 3.14 due to dependency compatibility)
+- Python 3.11+
 - Readwise Reader account with API token
 - (Optional) [1Password CLI](https://developer.1password.com/docs/cli) for secure credential management
 
@@ -252,11 +252,6 @@ The application follows a three-pane layout:
 
 - Create `~/.config/rwreader/config.toml` with required fields
 - Use `rwreader --create-config PATH` to generate a template
-
-### Python 3.14 compatibility
-
-- Some dependencies don't yet support Python 3.14
-- Use Python 3.11, 3.12, or 3.13
 
 ## License
 
