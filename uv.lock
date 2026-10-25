@@ -1800,7 +1800,7 @@ wheels = [
 [[package]]
 name = "readwise-api"
 version = "0.5.0"
-source = { git = "https://github.com/reuteras/readwise-api.git#00073b2bc14320006cc63d62f9016e4353e5117e" }
+source = { git = "https://github.com/reuteras/readwise-api.git#1855e1837897bf079896a411652c8637c09d82a2" }
 dependencies = [
     { name = "pydantic" },
     { name = "requests" },
