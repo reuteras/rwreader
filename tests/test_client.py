@@ -881,6 +881,7 @@ class TestMarkSeen:
         assert client.mark_seen("a1", seen=False) is True
         assert client._article_cache["a1"]["first_opened_at"] == ""
         assert [d["id"] for d in index.query(unread_only=True)] == ["a1"]
+        client.close()
 
     @patch("rwreader.client.readwise.update_document_seen")
     @patch("rwreader.client.ReadwiseReader")

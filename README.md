@@ -21,7 +21,7 @@ A modern, keyboard-driven terminal user interface (TUI) for [Readwise Reader](ht
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11.5+
 - Readwise Reader account with API token
 - (Optional) [1Password CLI](https://developer.1password.com/docs/cli) for secure credential management
 

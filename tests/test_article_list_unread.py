@@ -1,5 +1,6 @@
 """Tests for ArticleListScreen's unread-only view backed by the local index."""
 
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import Mock
 
@@ -44,7 +45,7 @@ def _client(index: DocumentIndex | None) -> Mock:
 
 
 @pytest.fixture
-def index() -> DocumentIndex:
+def index() -> Generator[DocumentIndex, None, None]:
     """An in-memory index with read and unread documents in two locations."""
     idx = DocumentIndex(":memory:")
     idx.upsert_many(
@@ -55,7 +56,8 @@ def index() -> DocumentIndex:
             _doc("4", "new"),
         ]
     )
-    return idx
+    yield idx
+    idx.close()
 
 
 async def _open(app: _HostApp, pilot: Any, category: str) -> ArticleListScreen:
