@@ -52,3 +52,22 @@ jobs:
     - name: Check coverage threshold
       run: |
         uv run pytest tests/ --cov=rwreader --cov-fail-under=10 --cov-report=term-missing -m "not integration"
+
+  # The required check (ruleset required-checks); see dev-docs docs/github.md.
+  tests-passed:
+    name: Tests passed
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "A job ended with: $result"
+              exit 1
+            fi
+          done
